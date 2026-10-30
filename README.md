@@ -1,4 +1,4 @@
-# 星序 / ORBIT 0.9.2
+# 星序 / ORBIT 0.9.3
 
 简约、亲切的 Linux 原生桌面注意力工具。七节点轨迹标记、雾白与蓝灰配色，用轻量的精密感连接工作、学习、Demo 和日常事项。PyQt5 界面、真实 YomkServerPy 服务，同进程复用固定版本 Work Station。主题规范见 [品牌文档](docs/BRAND_THEME.md)，更多工程说明见 [docs/](docs/README.md)。
 
@@ -6,7 +6,7 @@
 
 ## 应用下载
 
-[0.9.2 安装包、校验与说明](release/README.md)。提供 Linux x86_64 的 `.deb` 和便携压缩包，内置 Python/Qt；安装后从应用菜单启动，或解压后运行 `orbit/orbit`。升级前先从旧版托盘退出。
+[0.9.3 安装包、校验与说明](release/README.md)。提供 Linux x86_64 的 `.deb` 和便携压缩包，内置 Python/Qt；安装后从应用菜单启动，或解压后运行 `orbit/orbit`。升级前先从旧版托盘退出。
 
 ## 自动更新
 

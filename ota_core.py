@@ -74,7 +74,7 @@ class GitHubSource:
         if self.token and parsed.hostname=='api.github.com':
             headers['Authorization'] = 'Bearer '+self.token
         try:
-            return self.opener.open(Request(url, headers=headers), timeout=5)
+            return self.opener.open(Request(url, headers=headers), timeout=15 if binary else 5)
         except HTTPError as exc:
             if exc.code in (401,404) and self.token is None:
                 # Reuse an existing login only; never launch a login flow or save tokens.

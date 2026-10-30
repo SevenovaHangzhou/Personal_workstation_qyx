@@ -13,6 +13,7 @@ from urllib.request import Request
 from ota_core import (API, REPOSITORY, GitHubSource, Redirect, extract_package, release_assets,
                       stage_release, version_tuple, validate_manifest)
 from runtime import MomoRuntime
+from typedefine.TypeDefine import APP_VERSION
 
 
 def fixture(version='0.9.2',actual_version=None):
@@ -131,7 +132,7 @@ class OtaServiceTests(unittest.TestCase):
         self.assertIsNone(self.runtime.updates.snapshot()['ready'])
 
     def test_equal_older_and_prerelease_do_not_download(self):
-        for tag,preview in [('v0.9.2',False),('v0.9.0',False),('v0.10.0',True)]:
+        for tag,preview in [('v'+APP_VERSION,False),('v0.9.0',False),('v0.10.0',True)]:
             self.release.update(tag_name=tag,prerelease=preview)
             with patch.object(self.service,'stager') as stager:self.check();stager.assert_not_called()
         self.assertFalse((self.service.folder/'current-version').exists())
