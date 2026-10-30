@@ -169,6 +169,8 @@ class CourseReader(QDialog):
         super().__init__(parent); self.client=client; self.task_id=task_id; self.course_id=course_id
         self.setWindowModality(Qt.NonModal)
         self.course=client.course(course_id,task_id); self.package=self.course['package']; self.drafts={}; self.dirty=set()
+        self.study_record=client.study_state(task_id,course_id) if hasattr(client,'study_state') else {}
+        self.study_positions={}; self.active_lesson=None; self.restoring_study=False; self._saved_study=None
         self.lesson_rows=ordered_lessons(self.package)
         self.setWindowTitle(self.course['title']+' · 开始学习'); self.resize(1400,860); self.setMinimumSize(1040,640)
         layout=box(self,margins=(20,20,20,20),spacing=12)
@@ -234,7 +236,17 @@ class CourseReader(QDialog):
         self.notice=label('作答自动保存；书面题请对照参考过程自查。','muted',True); footer.addWidget(self.notice,1)
         footer.addWidget(button('关闭课程','outline',callback=self.accept)); layout.addLayout(footer)
         self.debounce=QTimer(self); self.debounce.setSingleShot(True); self.debounce.setInterval(500); self.debounce.timeout.connect(self.save_answers)
-        self.lessons.currentRowChanged.connect(self.show_lesson); self.lessons.setCurrentRow(0)
+        self.study_timer=QTimer(self); self.study_timer.setSingleShot(True); self.study_timer.setInterval(900); self.study_timer.timeout.connect(self.save_study)
+        self.restore_timer=QTimer(self); self.restore_timer.setSingleShot(True); self.restore_timer.timeout.connect(self.restore_position)
+        self.scroll.verticalScrollBar().valueChanged.connect(self.mark_study)
+        self.tutor.question.textChanged.connect(self.mark_study)
+        self.lessons.currentRowChanged.connect(self.show_lesson)
+        previous=next((i for i,row in enumerate(self.lesson_rows) if row['id']==self.study_record.get('lesson_id')),0)
+        if self.study_record:
+            self.study_positions[self.study_record['lesson_id']]=self.study_record.get('scroll_ratio',0)
+            self.tutor.question.setPlainText(self.study_record.get('question',''))
+            self.tabs.setCurrentWidget(self.course_page)
+        self.lessons.setCurrentRow(previous)
 
     def selectable(self, text, name=None):
         widget=label(text,name,True); widget.setTextInteractionFlags(Qt.TextSelectableByMouse|Qt.TextSelectableByKeyboard)
@@ -266,7 +278,11 @@ class CourseReader(QDialog):
 
     def show_lesson(self,index):
         if index<0 or not self.save_answers(): return
+        if self.active_lesson:
+            self.capture_study_position(); self.save_study()
+        self.restoring_study=True
         clear(self.body); lesson=self.lesson_rows[index]
+        self.active_lesson=lesson
         self.tutor.set_lesson(lesson['id'],lesson['title'])
         self.knowledge.set_lesson(lesson)
         self.body.addWidget(self.selectable(lesson['title'],'h2'))
@@ -277,7 +293,33 @@ class CourseReader(QDialog):
             for block in section['blocks']: self.add_block(block)
         self.body.addWidget(line()); self.body.addWidget(label('独立练习','h2'))
         for question in lesson['questions']: self.add_question(lesson,question)
-        self.scroll.verticalScrollBar().setValue(0)
+        self.restore_timer.start(0)
+
+    def restore_position(self):
+        if not self.active_lesson: return
+        bar=self.scroll.verticalScrollBar(); bar.setValue(round(bar.maximum()*self.study_positions.get(self.active_lesson['id'],0)))
+        self.restoring_study=False; self.mark_study()
+
+    def capture_study_position(self):
+        if self.active_lesson and not self.restoring_study:
+            bar=self.scroll.verticalScrollBar()
+            self.study_positions[self.active_lesson['id']]=bar.value()/bar.maximum() if bar.maximum() else 0
+
+    def mark_study(self, *unused):
+        if not self.restoring_study: self.study_timer.start()
+
+    def save_study(self):
+        self.study_timer.stop()
+        if not self.active_lesson or not hasattr(self.client,'save_study'): return True
+        self.capture_study_position(); lesson=self.active_lesson
+        value=dict(task_id=self.task_id,course_id=self.course_id,lesson_id=lesson['id'],
+                   lesson_revision=lesson['revision'],scroll_ratio=self.study_positions.get(lesson['id'],0),question=self.tutor.question.toPlainText())
+        if value==self._saved_study: return True
+        try:
+            self.client.save_study(**value)
+        except (ValueError,OSError) as exc: self.notice.setText('续读记录尚未保存：'+str(exc)); return False
+        self._saved_study=value
+        return True
 
     def add_block(self,block):
         kind=block['type']
@@ -343,4 +385,7 @@ class CourseReader(QDialog):
         return True
 
     def done(self,code):
-        if self.save_answers(): super().done(code)
+        if self.save_answers() and self.save_study(): super().done(code)
+
+    def hideEvent(self,event):
+        self.save_study(); super().hideEvent(event)

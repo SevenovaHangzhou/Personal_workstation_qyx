@@ -52,7 +52,8 @@ class CodexRpc:
             env = dict(os.environ)
             self.process = subprocess.Popen([executable, "app-server", "--listen", "stdio://"],
                                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env)
-            self.request("initialize", {"clientInfo": {"name": "momo_task_manager", "title": "Momo", "version": APP_VERSION}}, timeout=15)
+            self.request("initialize", {"clientInfo": {"name": "momo_task_manager", "title": "ORBIT", "version": APP_VERSION},
+                                        "capabilities":{"experimentalApi":True}}, timeout=15)
             self.send({"method": "initialized"})
             return self
         except Exception:
@@ -165,10 +166,16 @@ class CodexRpc:
         return message_text(items)
 
     def create(self, title, cwd):
-        result = self.request("thread/start", {"cwd": cwd, "ephemeral": False})
-        identifier = thread_id(result.get("thread", {}).get("id"))
+        # CLI 0.159.3's paginated default returns a rollout path that may not
+        # exist, and a fresh server cannot resume the empty thread. Desktop
+        # deep links need the legacy rollout. Do not synthesize a JSONL file.
+        result = self.request("thread/start", {"cwd": cwd, "ephemeral": False,'historyMode':'legacy'})
+        thread=result.get('thread',{}); identifier = thread_id(thread.get("id"))
         # The app-server method is thread/name/set (generated protocol).
         self.request("thread/name/set", {"threadId": identifier, "name": title})
+        path=thread.get('path')
+        if not isinstance(path,str) or not Path(path).is_absolute() or not Path(path).is_file() or not Path(path).stat().st_size:
+            raise CodexError('Codex 尚未生成可继续的会话文件，未绑定此聊天。请检查 CLI 版本及本机存储。')
         return identifier
 
     def close(self):

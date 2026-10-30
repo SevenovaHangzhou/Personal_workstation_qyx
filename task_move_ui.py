@@ -1,6 +1,6 @@
 """Choose task connections across collapsed groups and current view filters."""
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QDialog, QLineEdit, QListWidget, QListWidgetItem
+from PyQt5.QtWidgets import QDialog, QLineEdit, QListWidget, QListWidgetItem, QScrollArea
 from task_outline import TaskOutline
 from ui_helpers import box, label, button
 
@@ -28,7 +28,10 @@ class TaskMoveDialog(QDialog):
             text=target['title']+'\n'+path+' · '+target['day']
             item=QListWidgetItem(text); item.setData(Qt.UserRole,target['id']); item.setToolTip(text)
             self.targets.addItem(item)
-        self.reason=label('先选择目标任务。','muted',True); layout.addWidget(self.reason)
+        self.reason=label('先选择目标任务。','muted',True)
+        self.preview=QScrollArea(); self.preview.setWidgetResizable(True); self.preview.setFrameShape(QScrollArea.NoFrame)
+        self.preview.setMinimumHeight(90); self.preview.setMaximumHeight(130); self.preview.setWidget(self.reason)
+        self.preview.setAccessibleName('任务移动影响预览'); layout.addWidget(self.preview)
         layout.addWidget(button('管理相关依赖','linkButton',callback=self.manage_dependencies))
         actions=box(horizontal=True)
         self.child_button=button('作为子步骤合入','primary',callback=lambda:self.choose('child'))
@@ -49,10 +52,14 @@ class TaskMoveDialog(QDialog):
         item=self.targets.currentItem()
         self.target_id=item.data(Qt.UserRole) if item and not item.isHidden() else None
         reasons=[]
+        previews=[]
         for mode,action in [('child',self.child_button),('after',self.after_button)]:
             error='先选择目标任务。'
             if self.target_id:
-                try: self.client.check_merge(self.task_id,self.target_id,mode); error=''
+                try:
+                    result=self.client.check_merge(self.task_id,self.target_id,mode); error=''
+                    from task_structure import impact_text
+                    previews.append(('合入：' if mode=='child' else '后续：')+impact_text(result['impact']))
                 except (ValueError,OSError) as exc: error=str(exc)
             action.setEnabled(bool(self.target_id) and not error); action.setToolTip(error)
             if error and error not in reasons: reasons.append(error)
@@ -60,6 +67,7 @@ class TaskMoveDialog(QDialog):
         self.reason.setText(('没有匹配的同类任务，可调整搜索或先创建目标任务。' if not visible else
                              '\n'.join(reasons) if reasons else
                              '合入会成为目标的一部分；接在之后会建立同层前置依赖。'))
+        if self.target_id and previews: self.reason.setText(self.reason.text()+'\n'+('\n\n'.join(previews)))
 
     def manage_dependencies(self):
         self.owner.manage_dependencies(self.task_id,self); self.update_actions()

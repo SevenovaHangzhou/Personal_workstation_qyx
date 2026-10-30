@@ -51,15 +51,13 @@ class TaskOutline:
         opened = (set(expanded) | automatic) - set(collapsed)
         result = []
 
-        def visit(task, depth):
+        stack=[(task,0) for task in reversed(self.tasks)
+               if task['id'] in included and task.get('parent_id') not in included]
+        while stack:
+            task,depth=stack.pop()
             children = [child for child in self.children[task['id']] if child['id'] in included]
             is_open = bool(children) and task['id'] in opened
             result.append(OutlineRow(task, depth, task['id'] not in matched, is_open, len(children)))
             if is_open:
-                for child in children:
-                    visit(child, depth + 1)
-
-        for task in self.tasks:
-            if task['id'] in included and task.get('parent_id') not in included:
-                visit(task, 0)
+                stack.extend((child,depth+1) for child in reversed(children))
         return result

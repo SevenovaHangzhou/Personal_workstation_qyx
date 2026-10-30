@@ -36,6 +36,8 @@ class TaskService(MomoService):
             ("merge", self.merge, "MergeTask", "将已有任务和子树原子合入目标任务"),
             ("check_detach", self.check_detach, "TaskId", "检查子步骤能否独立，保留依赖"),
             ("detach", self.detach, "TaskId", "将子步骤和子树原子移为独立任务"),
+            ('undo_state', self.undo_state, 'None', '读取最近一次结构调整的安全撤销状态'),
+            ('undo_structure', self.undo_structure, 'dict', '核对记录后只撤销结构，不覆盖任务内容'),
             ("update", self.update, "UpdateTask", "更新任务文字、分类与计划日期"),
             ("set_status", self.set_status, "TaskStatus", "更新任务状态"),
             ("add_children", self.add_children, "ChildTasks", "批量添加独立子任务，保留兼容端点"),
@@ -111,7 +113,8 @@ class TaskService(MomoService):
     def check_merge(self, pkg):
         require(isinstance(pkg, MergeTask), "expected MergeTask")
         task, parent = self.repository.check_merge(pkg.task_id, pkg.parent_id, pkg.mode)
-        return ok({"task":task, "parent":parent})
+        from task_structure import impact
+        return ok({"task":task, "parent":parent,'impact':impact(self.repository.tasks,pkg.task_id,pkg.parent_id,pkg.mode)})
 
     def merge(self, pkg):
         require(isinstance(pkg, MergeTask), "expected MergeTask")
@@ -132,9 +135,18 @@ class TaskService(MomoService):
     def dependencies(self, pkg):
         require(isinstance(pkg, dict) and set(pkg) == {"task_id", "depends_on"}, "无效依赖调整")
         self.task(pkg["task_id"])
-        self.repository.update(pkg["task_id"], depends_on=copy.deepcopy(pkg["depends_on"]))
+        self.repository.change_dependencies(pkg["task_id"],pkg['depends_on'])
         self.changed()
         return ok(self.task(pkg["task_id"]))
+
+    def undo_state(self, pkg):
+        require(pkg is None,'expected None')
+        return ok(self.repository.undo_state())
+
+    def undo_structure(self, pkg):
+        require(isinstance(pkg,dict) and set(pkg)=={'id'} and isinstance(pkg['id'],str),'无效撤销请求')
+        self.repository.undo_structure(pkg['id']); self.changed()
+        return ok()
 
     def acknowledge_parent(self, pkg):
         require(isinstance(pkg, dict) and set(pkg) == {"task_id", "expected"}, "无效层级确认")

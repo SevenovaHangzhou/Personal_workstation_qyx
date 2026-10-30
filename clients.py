@@ -37,6 +37,8 @@ class TaskClient:
     def merge(self, task_id, parent_id, mode="child"): return call("/TaskService/merge", MergeTask(task_id, parent_id, mode))
     def check_detach(self, task_id): return call("/TaskService/check_detach", TaskId(task_id))
     def detach(self, task_id): return call("/TaskService/detach", TaskId(task_id))
+    def undo_state(self): return call('/TaskService/undo_state')
+    def undo_structure(self, identifier): return call('/TaskService/undo_structure',{'id':identifier})
     def acknowledge_parent(self, task_id, expected): return call("/TaskService/acknowledge_parent", {"task_id":task_id, "expected":expected})
     def dependencies(self, task_id, deps): return call("/TaskService/dependencies", {"task_id":task_id,"depends_on":deps})
     def detach_linear(self, task_id): return call("/TaskService/detach_linear", TaskId(task_id))
@@ -98,6 +100,8 @@ class LearningClient:
     def cancel(self, job_id): return call('/LearningService/cancel', {'job_id':job_id})
     def course(self, course_id, task_id): return call('/LearningService/course', {'course_id':course_id,'task_id':task_id})
     def answer(self, **answer): return call('/LearningService/answer', answer)
+    def study_state(self, task_id, course_id): return call('/LearningService/study_state',dict(task_id=task_id,course_id=course_id))
+    def save_study(self, **value): return call('/LearningService/save_study',value)
     def tutor_snapshot(self, task_id, course_id):
         return call('/LearningService/tutor_snapshot', dict(task_id=task_id,course_id=course_id))
     def tutor_ask(self, task_id, course_id, lesson_id, question, excerpt=''):

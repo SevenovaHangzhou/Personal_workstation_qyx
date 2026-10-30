@@ -141,6 +141,10 @@ class TaskDag(QWidget):
             node.update()
 
     def set_tasks(self, tasks):
+        signature=tuple((t['id'],t['title'],t.get('status','todo'),t.get('draft',False),
+                         len(t.get('steps',[])),tuple(t.get('depends_on',[]))) for t in tasks)
+        if getattr(self,'_task_signature',None)==signature:return
+        self._task_signature=signature
         scene = self.view.scene()
         scene.clear()
         self.nodes = {}

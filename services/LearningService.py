@@ -4,6 +4,7 @@ import json
 import os
 import threading
 import uuid
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from services.base import MomoService, ok, require
@@ -29,6 +30,10 @@ class LearningService(MomoService):
         self.folder = Path(folder); self.tasks = tasks; self.runner = runner or CourseRunner()
         self.workers = {}; self.stopping = False
         self.path = self.folder/'state.json'
+        self.reading_path=self.folder/'reading.json'; self.reading={}
+        if self.reading_path.exists():
+            self.reading=json.loads(self.reading_path.read_text(encoding='utf-8'))
+            require(isinstance(self.reading,dict),'续读记录无效，原文件已保留')
         self.state = {'version':1,'bindings':{},'jobs':{},'answers':{},'binding_versions':{},'concurrency':1,'revision':0}
         if self.path.exists():
             saved = json.loads(self.path.read_text(encoding='utf-8'))
@@ -61,7 +66,7 @@ class LearningService(MomoService):
 
     def init(self):
         for endpoint in ('revision','snapshot','catalog','bind','start','cancel','course','answer',
-                         'tutor_snapshot','tutor_ask','tutor_cancel'):
+                         'tutor_snapshot','tutor_ask','tutor_cancel','study_state','save_study'):
             self.install('/'+endpoint,getattr(self,endpoint),'dict','学习课程、后台生成与作答：'+endpoint)
         self.alive = True
         return 0
@@ -232,6 +237,27 @@ class LearningService(MomoService):
             answers = self.state['answers'].setdefault(pkg['task_id'],{}).setdefault(storage_id,{})
             answers[key] = pkg['text']
         self._mutate(write); return ok()
+
+    def study_state(self, pkg):
+        course=self._tutor_course(pkg)
+        value=self.reading.get(pkg['task_id'],{}).get(course['id'],{})
+        if value:
+            lesson=next((row for row in course['package']['lessons'] if row['id']==value.get('lesson_id')),None)
+            if not lesson: return ok({})
+            if lesson['revision']!=value.get('lesson_revision'): value={**value,'scroll_ratio':0}
+        return ok(value)
+
+    def save_study(self, pkg):
+        require(isinstance(pkg,dict) and set(pkg)=={'task_id','course_id','lesson_id','lesson_revision','scroll_ratio','question'},'无效续读记录')
+        course=self._tutor_course(pkg)
+        lesson=next((row for row in course['package']['lessons'] if row['id']==pkg['lesson_id']),None)
+        require(lesson and lesson['revision']==pkg['lesson_revision'],'章节版本已变化，未覆盖续读记录')
+        require(type(pkg['scroll_ratio']) in (int,float) and math.isfinite(pkg['scroll_ratio']) and 0<=pkg['scroll_ratio']<=1,'无效阅读位置')
+        require(isinstance(pkg['question'],str) and len(pkg['question'])<=20000,'未发送问题过长，暂未保存')
+        reading=copy.deepcopy(self.reading)
+        reading.setdefault(pkg['task_id'],{})[pkg['course_id']]={k:pkg[k] for k in ('lesson_id','lesson_revision','scroll_ratio','question')}
+        atomic_json(self.reading_path,reading); self.reading=reading
+        return ok()
 
     def _tutor_course(self, pkg):
         require(isinstance(pkg,dict), '无效学习问答请求')

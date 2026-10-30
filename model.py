@@ -125,6 +125,7 @@ class JsonTaskRepository:
         self.sample = True
         self.settings = {"focus_minutes": 25}
         self.tasks = []
+        self.structure_undo = None
         if self.path.exists():
             try:
                 payload = json.loads(self.path.read_text(encoding="utf-8"))
@@ -137,6 +138,7 @@ class JsonTaskRepository:
                         raise ValueError("任务数据无效")
                     seen.add(task["id"])
                 self.tasks = payload["tasks"]
+                self.structure_undo = payload.get('structure_undo')
                 self.sample = bool(payload.get("sample", False))
                 settings = payload.get("settings", {})
                 if not isinstance(settings, dict):
@@ -224,7 +226,8 @@ class JsonTaskRepository:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temp = self.path.with_suffix(".tmp")
         with temp.open("w", encoding="utf-8") as stream:
-            json.dump({"version":2, "sample":self.sample, "settings":self.settings, "tasks":self.tasks}, stream, ensure_ascii=False, indent=2)
+            json.dump({"version":2, "sample":self.sample, "settings":self.settings, "tasks":self.tasks,
+                       "structure_undo":self.structure_undo}, stream, ensure_ascii=False, indent=2)
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temp, self.path)
@@ -252,6 +255,45 @@ class JsonTaskRepository:
             raise ValueError("其他步骤仍以此为前置，请在「规划下一步」中解除依赖后再删除")
         self.replace_tasks([task for task in self.tasks if task["id"] != task_id])
 
+    def commit_structure(self, tasks, label):
+        from task_structure import projection
+        before,after=projection(self.tasks),projection(tasks)
+        previous=self.structure_undo
+        if before!=after:
+            self.structure_undo=dict(id=str(uuid.uuid4()),label=label,before=before,after=after)
+        try: self.replace_tasks(tasks)
+        except Exception: self.structure_undo=previous; raise
+
+    def undo_state(self):
+        from task_structure import projection
+        entry=self.structure_undo
+        valid=isinstance(entry,dict) and all(k in entry for k in ('id','label','before','after'))
+        if not valid: return dict(available=False,reason='暂无可撤销的结构调整',id=None,label='')
+        available=projection(self.tasks)==entry['after']
+        return dict(available=available,id=entry['id'],label=entry['label'],
+                    reason='' if available else '任务结构已再次变化，不能覆盖后续调整')
+
+    def undo_structure(self, expected):
+        from task_structure import parent_sync
+        state=self.undo_state()
+        if not state['available'] or expected!=state['id']:
+            raise ValueError(state['reason'] or '撤销记录已变化，请重新确认')
+        entry=self.structure_undo; by_id={t['id']:copy.deepcopy(t) for t in self.tasks}; tasks=[]
+        for row in entry['before']:
+            task=by_id[row['id']]; changed=task.get('parent_id')!=row['parent_id']
+            task.update(copy.deepcopy(row))
+            if changed and task['category']=='work': task['linear_parent_pending']=parent_sync(task['parent_id'])
+            tasks.append(task)
+        self.structure_undo=None
+        try: self.replace_tasks(tasks)
+        except Exception: self.structure_undo=entry; raise
+
+    def change_dependencies(self, task_id, depends_on):
+        tasks=copy.deepcopy(self.tasks); task=next((t for t in tasks if t['id']==task_id),None)
+        if task is None: raise ValueError('任务不存在')
+        task['depends_on']=copy.deepcopy(depends_on)
+        self.commit_structure(tasks,'调整前置步骤')
+
     def reorder(self, task_ids):
         """Reorder a visible subset in its existing slots; keep hidden tasks in place."""
         if (not isinstance(task_ids, list) or not task_ids
@@ -266,7 +308,7 @@ class JsonTaskRepository:
             return False
         ordered = iter(by_id[task_id] for task_id in task_ids)
         tasks = [next(ordered) if task["id"] in scope else task for task in self.tasks]
-        self.replace_tasks(copy.deepcopy(tasks))
+        self.commit_structure(copy.deepcopy(tasks),'调整任务顺序')
         return True
 
     def check_merge(self, task_id, parent_id, mode="child"):
@@ -327,7 +369,7 @@ class JsonTaskRepository:
             target_tree = expanded
         position = max(i for i, task in enumerate(remaining) if task["id"] in target_tree) + 1
         remaining[position:position] = [task for task in tasks if task["id"] in moved]
-        self.replace_tasks(remaining)
+        self.commit_structure(remaining,'合入子步骤' if mode=='child' else '连接后续步骤')
 
     def check_detach(self, task_id):
         task = self.get(task_id)
@@ -356,7 +398,7 @@ class JsonTaskRepository:
             if now >= due: due += timedelta(days=1)
             source['linear_parent_pending'] = dict(parent_id=None, revision=str(uuid.uuid4()), due_at=due.isoformat())
         source['parent_id'] = None
-        self.replace_tasks(tasks)
+        self.commit_structure(tasks,'移为独立任务')
 
     def acknowledge_parent(self, task_id, expected):
         task = self.get(task_id)

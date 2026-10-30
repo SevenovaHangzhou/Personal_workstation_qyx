@@ -282,6 +282,7 @@ class Momo(QMainWindow):
         reset=button(name="iconButton",glyph="reset",callback=self.reset_focus); reset.setToolTip("重置当前计时"); reset.setAccessibleName("重置当前计时"); buttons.addWidget(reset); timer.addLayout(buttons); focus.addLayout(timer)
         col.addWidget(self.focus_card)
         listhead=box(horizontal=True,spacing=7); self.list_title=label("我的任务","h2"); listhead.addWidget(self.list_title); self.list_count=label("5","badge"); listhead.addWidget(self.list_count); listhead.addStretch()
+        self.undo_structure_button=button('撤销结构调整','linkButton',callback=self.undo_task_structure); listhead.addWidget(self.undo_structure_button)
         self.my_issues_button=button("拉取 My Issues","soft","linear",callback=self.pull_my_issues); listhead.addWidget(self.my_issues_button)
         self.list_btn=button(name="iconButton",glyph="list",callback=lambda:self.change_mode("list")); self.list_btn.setToolTip("列表视图"); self.list_btn.setAccessibleName("列表视图")
         self.board_btn=button(name="iconButton",glyph="grid",callback=lambda:self.change_mode("board")); self.board_btn.setToolTip("看板视图"); self.board_btn.setAccessibleName("看板视图"); listhead.addWidget(self.list_btn); listhead.addWidget(self.board_btn); col.addLayout(listhead)
@@ -324,6 +325,8 @@ class Momo(QMainWindow):
         self.learning_state=self.runtime.learning.snapshot()
         self.seen_learning_revision=self.learning_state["revision"]
         self.my_issues_button.setVisible(self.view == "work")
+        undo=self.tasks.undo_state(); self.undo_structure_button.setEnabled(undo['available'])
+        self.undo_structure_button.setToolTip(('撤销：'+undo['label']) if undo['available'] else undo['reason'])
         today=[t for t in self.tasks.tasks if t["day"]==date.today().isoformat()]; done=sum(t["status"]=="done" for t in today)
         self.sample_badge.setVisible(self.tasks.sample)
         self.sidebar_done.setText(f"今天完成 {done} 项任务"); self.day_progress.setValue(round(done/len(today)*100) if today else 0)
@@ -353,6 +356,7 @@ class Momo(QMainWindow):
         filter_key=(self.view,self.status_filter,self.search.text().strip().lower())
         if filter_key!=self.outline_filter:
             self.collapsed_tasks.clear(); self.outline_filter=filter_key
+            self.task_page_limit=80
         reveal=bool(filter_key[2]) or self.status_filter!='all' or self.view in ('done','linked')
         entries=self.task_outline.rows(tasks,self.expanded_tasks,self.collapsed_tasks,reveal)
         self.outline_entries={entry.task['id']:entry for entry in entries}
@@ -361,6 +365,10 @@ class Momo(QMainWindow):
         self.list_count.setToolTip('当前筛选中的独立任务与子步骤数量；子步骤收起后仍计入。')
         hidden=len(tasks)-sum(not entry.context for entry in entries)
         self.outline_hint.setText(f'已收起 {hidden} 个子步骤 · 点父任务上的「展开」查看。' if hidden else ('保留父级路径，方便定位筛选中的子步骤。' if any(entry.context for entry in entries) else '子步骤收在父任务内；展开后显示层级与所属任务。'))
+        selected_index=next((i for i,entry in enumerate(entries) if entry.task['id']==self.selected),-1)
+        self.task_page_limit=max(getattr(self,'task_page_limit',80),((selected_index//80)+1)*80)
+        remaining=max(0,len(entries)-self.task_page_limit); entries=entries[:self.task_page_limit]
+        if remaining:self.outline_hint.setText(self.outline_hint.text()+f' · 另有 {remaining} 项，可继续显示或搜索定位。')
         self.list_btn.setStyleSheet("background:#e7eff5;" if self.list_mode=="list" else ""); self.board_btn.setStyleSheet("background:#e7eff5;" if self.list_mode=="board" else "")
         if not tasks:
             self.task_list.addSpacing(45); empty=label("这里安安静静的。\n新建一件小事，或换一个筛选看看。","muted",True); empty.setAlignment(Qt.AlignCenter); self.task_list.addWidget(empty); return
@@ -380,6 +388,13 @@ class Momo(QMainWindow):
                     add_outline_card(stack,BoardCard(task,task['id']==self.selected,self,entry),entry,compact=True)
                 board.addWidget(column,1)
             self.task_list.addLayout(board)
+        if remaining:
+            more=button(f'继续显示 · 还有 {remaining} 项','outline',callback=self.show_more_tasks)
+            more.setObjectName('showMoreTasks'); self.task_list.addWidget(more)
+
+    def show_more_tasks(self):
+        position=self.scroll.verticalScrollBar().value(); self.task_page_limit+=80; self.refresh_list()
+        QTimer.singleShot(0,lambda:self.scroll.verticalScrollBar().setValue(position))
 
     def course_action(self,task_id):
         active=next((j for j in reversed(self.learning_state['jobs']) if j['input']['task_id']==task_id and j['status'] in ('queued','running')),None)
@@ -457,12 +472,22 @@ class Momo(QMainWindow):
             else: QMessageBox.warning(self,'无法移出',str(exc))
             return False
         message='将「'+task['title']+'」移出父任务，成为独立任务？\n笔记、聊天、课程和已有子步骤都会保留。'
+        from task_structure import impact, impact_text
+        message+='\n\n'+impact_text(impact(self.tasks.tasks,task_id))
         if task['category']=='work': message+='\nLinear issue 父级将在 22:00 同步。'
         if QMessageBox.question(self,'移为独立任务',message,QMessageBox.Yes|QMessageBox.No,QMessageBox.No)!=QMessageBox.Yes: return False
         if not self.write(lambda:self.tasks.detach(task_id)): return False
         self.selected=task_id; self.task_order_saved=True
         if not self.task_drag_active: self.refresh()
         return True
+
+    def undo_task_structure(self):
+        if not self.flush_editors(): return
+        state=self.tasks.undo_state()
+        if not state['available']: QMessageBox.information(self,'无法撤销',state['reason']); return
+        text='撤销「'+state['label']+'」？\n仅恢复任务层级、依赖和顺序，保留当前笔记、状态、聊天与课程记录。\n工作任务的父级变化将在下次 22:00 同步。'
+        if QMessageBox.question(self,'撤销最近的结构调整',text,QMessageBox.Yes|QMessageBox.No,QMessageBox.No)!=QMessageBox.Yes: return
+        if self.write(lambda:self.tasks.undo_structure(state['id'])): self.refresh()
 
     def merge_task(self,task_id,target_id):
         if not self.flush_editors(): return False
@@ -482,7 +507,10 @@ class Momo(QMainWindow):
             layout.addWidget(action); layout.addWidget(explanation)
         def update_choices():
             for mode,action,explanation,description in choices:
-                try: self.tasks.check_merge(task_id,target_id,mode); error=''
+                try:
+                    result=self.tasks.check_merge(task_id,target_id,mode); error=''
+                    from task_structure import impact_text
+                    description+='\n'+impact_text(result['impact'])
                 except (ValueError,OSError) as exc: error=str(exc)
                 action.setEnabled(not error); explanation.setText(error or description)
         def manage(): self.manage_dependencies(task_id,dialog); update_choices()
@@ -930,6 +958,9 @@ class Momo(QMainWindow):
         else: self.exiting=False
 
     def closeEvent(self,event):
+        storage=getattr(self,'storage_dialog',None)
+        if storage and storage.worker:
+            storage.reject(); event.ignore(); return
         if self.binding_dialog and self.binding_dialog.busy:
             self.binding_dialog.reject(); event.ignore(); return
         if self.linear_dialog and self.linear_dialog.busy:

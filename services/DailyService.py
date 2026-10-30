@@ -46,8 +46,13 @@ class DailyService(MomoService):
 
     def snapshot(self, pkg):
         require(pkg is None, 'expected None')
+        from daily_pending import pending_work
+        config=self.store.get('config'); revision=self.engine.tasks.revision()['revision']
+        key=(revision,config['next_day'],repr(config.get('target')),config['enabled'])
+        if getattr(self,'_pending_key',None)!=key:
+            self._pending_rows=pending_work(self.engine.tasks.tasks,config); self._pending_key=key
         return ok({'report_revision':self.store.get('report_revision',0), 'config':self.store.get('config'), 'reports':self.store.reports(), 'busy':self.busy,
-                   'notice':self.notice, 'folder':str(self.store.folder)})
+                   'notice':self.notice, 'folder':str(self.store.folder),'pending_sync':self._pending_rows})
 
     def configure(self, pkg):
         require(isinstance(pkg, dict) and set(pkg) <= {'enabled','target'}, '无效日报设置')
