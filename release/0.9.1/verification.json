@@ -1,0 +1,48 @@
+{
+  "version": "0.9.1",
+  "full_regression": {
+    "tests": 274,
+    "result": "passed",
+    "phase": "before final cancel-ready boundary patch"
+  },
+  "final_ota_regression": {
+    "tests": 24,
+    "result": "passed"
+  },
+  "package_checks": [
+    "frozen version",
+    "frozen offline self-test",
+    "offscreen startup",
+    "extracted portable offline self-test",
+    "extracted Debian offline self-test"
+  ],
+  "ota_end_to_end": {
+    "version": "0.9.1",
+    "metadata": "local manifest/digests for pre-publication full package test",
+    "download_verification": true,
+    "isolated_probe": true,
+    "activation_on_exit": true,
+    "simulated_older_launcher": true,
+    "real_new_packaged_gui": true,
+    "health_marker_completed": true,
+    "exit_code": 0,
+    "user_data_modified": false
+  },
+  "frozen_live_https": {
+    "frozen_app": true,
+    "automatic_live_github_check": true,
+    "certificate_verification_enabled": true,
+    "isolated_data": true,
+    "state": {
+      "enabled": true,
+      "last_checked": "2026-10-30T11:26:07.798151+00:00",
+      "ready": null
+    },
+    "termination": "test-owned process terminated after completed check"
+  },
+  "limits": [
+    "No interactive desktop tray-host validation",
+    "No cross-distribution validation"
+  ],
+  "real_user_data_modified": false
+}
