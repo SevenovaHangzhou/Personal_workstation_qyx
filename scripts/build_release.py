@@ -151,6 +151,12 @@ def main():
             result = run([str(binary), '--self-test'], cwd=temporary, env=probe_env,
                          capture_output=True, text=True, timeout=60)
             (work/(name+'-self-test.log')).write_text(result.stdout+result.stderr)
+        # Reproduce /usr/bin/orbit without installing into the host system.
+        entry = extracted/'command-bin/orbit'; entry.parent.mkdir()
+        entry.symlink_to(extracted/'debian/opt/sevenova-orbit/orbit')
+        result = run([str(entry), '--self-test'], cwd=temporary, env=probe_env,
+                     capture_output=True, text=True, timeout=60)
+        (work/'debian-command-self-test.log').write_text(result.stdout+result.stderr)
     artifacts = [dict(file=p.name, bytes=p.stat().st_size, sha256=hashlib.sha256(p.read_bytes()).hexdigest()) for p in (tar_path, deb_path)]
     revision = run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
     manifest = dict(version=release_version, platform='linux-x86_64', minimum_glibc='2.35',
@@ -158,7 +164,8 @@ def main():
                     python=platform.python_version(), pyinstaller=metadata.version('pyinstaller'),
                     runtime_packages=versions, artifacts=artifacts,
                     verification=['frozen --version', 'frozen --self-test', 'offscreen startup/screenshot',
-                                  'extracted portable --self-test', 'extracted Debian --self-test'],
+                                  'extracted portable --self-test', 'extracted Debian --self-test',
+                                  'Debian-style command symlink --self-test'],
                     user_data_included=False, codex_credentials_included=False)
     (output/'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2)+'\n')
     (output/'SHA256SUMS').write_text(''.join(f'{row["sha256"]}  {row["file"]}\n' for row in artifacts))

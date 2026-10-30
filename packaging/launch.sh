@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-ORBIT_APP_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ORBIT_APP_DIR="$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")"
 source "$ORBIT_APP_DIR/ota-launch.sh"
 orbit_ota_launch "$(cat -- "$ORBIT_APP_DIR/VERSION")" "$@"
 if [[ "${1:-}" == --version || "${1:-}" == --help || "${1:-}" == --self-test ]]; then

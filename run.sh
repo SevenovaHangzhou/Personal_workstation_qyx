@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-MOMO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+MOMO_ROOT="$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")"
 MOMO_LOG_DIR="${MOMO_LOG_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/orbit}"
 MOMO_LOG_FILE="$MOMO_LOG_DIR/startup.log"
 source "$MOMO_ROOT/packaging/ota-launch.sh"

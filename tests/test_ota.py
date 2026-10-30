@@ -131,7 +131,7 @@ class OtaServiceTests(unittest.TestCase):
         self.assertIsNone(self.runtime.updates.snapshot()['ready'])
 
     def test_equal_older_and_prerelease_do_not_download(self):
-        for tag,preview in [('v0.9.1',False),('v0.9.0',False),('v0.10.0',True)]:
+        for tag,preview in [('v0.9.2',False),('v0.9.0',False),('v0.10.0',True)]:
             self.release.update(tag_name=tag,prerelease=preview)
             with patch.object(self.service,'stager') as stager:self.check();stager.assert_not_called()
         self.assertFalse((self.service.folder/'current-version').exists())
