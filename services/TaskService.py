@@ -39,6 +39,8 @@ class TaskService(MomoService):
             ('undo_state', self.undo_state, 'None', '读取最近一次结构调整的安全撤销状态'),
             ('undo_structure', self.undo_structure, 'dict', '核对记录后只撤销结构，不覆盖任务内容'),
             ("update", self.update, "UpdateTask", "更新任务文字、分类与计划日期"),
+            ('record_progress', self.record_progress, 'dict', '追加人工进度记录，不改变状态'),
+            ('retract_progress', self.retract_progress, 'dict', '撤回进度记录并保留原文'),
             ("set_status", self.set_status, "TaskStatus", "更新任务状态"),
             ("add_children", self.add_children, "ChildTasks", "批量添加独立子任务，保留兼容端点"),
             ("apply_plan", self.apply_plan, "ApplyTaskPlan", "原子保存下一步规划和显式前置依赖"),
@@ -219,6 +221,25 @@ class TaskService(MomoService):
             self.repository.replace_tasks(tasks)
             self.changed()
         return ok(result)
+
+    def record_progress(self, pkg):
+        from progress_evidence import new_record
+        require(isinstance(pkg, dict) and set(pkg) == {'task_id', 'kind', 'text', 'source'}, '进度记录参数无效')
+        task = self.task(pkg['task_id'])
+        row = new_record(pkg['kind'], pkg['text'], pkg['source'])
+        self.repository.update(task['id'], evidence=copy.deepcopy(task.get('evidence', [])) + [row])
+        self.changed()
+        return ok(row)
+
+    def retract_progress(self, pkg):
+        from progress_evidence import retract
+        require(isinstance(pkg, dict) and set(pkg) == {'task_id', 'id'} and isinstance(pkg['id'], str), '撤回参数无效')
+        task = self.task(pkg['task_id'])
+        records = retract(task.get('evidence', []), pkg['id'])
+        if records != task.get('evidence', []):
+            self.repository.update(task['id'], evidence=records)
+            self.changed()
+        return ok(records)
 
     def update(self, pkg):
         require(isinstance(pkg, UpdateTask) and isinstance(pkg.changes, dict), "expected UpdateTask")

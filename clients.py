@@ -43,6 +43,10 @@ class TaskClient:
     def dependencies(self, task_id, deps): return call("/TaskService/dependencies", {"task_id":task_id,"depends_on":deps})
     def detach_linear(self, task_id): return call("/TaskService/detach_linear", TaskId(task_id))
     def update(self, task_id, **changes): return call("/TaskService/update", UpdateTask(task_id, changes))
+    def record_progress(self, task_id, kind, text, source=''):
+        return call('/TaskService/record_progress', dict(task_id=task_id, kind=kind, text=text, source=source))
+    def retract_progress(self, task_id, identifier):
+        return call('/TaskService/retract_progress', {'task_id':task_id, 'id':identifier})
     def set_status(self, task_id, status): return call("/TaskService/set_status", TaskStatus(task_id, status))
     def add_children(self, task_id, titles): return call("/TaskService/add_children", ChildTasks(task_id, titles))
     def apply_plan(self, task_id, steps, baseline): return call("/TaskService/apply_plan", ApplyTaskPlan(task_id, steps, baseline))

@@ -66,6 +66,7 @@ def sample_tasks():
 
 
 def validate_task(task):
+    from progress_evidence import validate_records
     required = {"id", "title", "category", "status", "day", "steps", "bindings", "note", "next_step", "description", "focus_seconds"}
     if not isinstance(task, dict) or not required.issubset(task):
         raise ValueError("任务数据不完整")
@@ -74,6 +75,7 @@ def validate_task(task):
     if not task["id"] or not task["title"].strip() or len(task["title"]) > 100 or task["category"] not in CATEGORIES or task["status"] not in STATUSES:
         raise ValueError("任务名称、分类或状态无效")
     date.fromisoformat(task["day"])
+    validate_records(task.get('evidence', []))
     if not isinstance(task["steps"], list) or not isinstance(task["bindings"], list):
         raise ValueError("任务列表格式有误")
     for step in task["steps"]:

@@ -649,6 +649,8 @@ class Momo(QMainWindow):
             self.detail_content.addWidget(course)
         self.detail_content.addWidget(line())
         props=box(horizontal=True); props.addWidget(label("计划日期","muted")); props.addStretch(); props.addWidget(label("今天" if task["day"]==date.today().isoformat() else task["day"],"muted")); self.detail_content.addLayout(props)
+        from progress_evidence_ui import ProgressPanel
+        self.detail_content.addWidget(ProgressPanel(self, task))
         from task_dependencies_ui import DependencyPanel
         self.detail_content.addWidget(DependencyPanel(self,task,self.tasks.tasks))
         if not task.get('parent_id'):

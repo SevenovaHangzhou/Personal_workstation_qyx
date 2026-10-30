@@ -7,6 +7,7 @@ from daily_history import HistoryIndex, cutoff, ZONE
 from daily_summary import CodexSummarizer
 from daily_git import daily_snapshot, git
 from model import CATEGORIES, STATUSES, issue_keys
+from progress_evidence import period_records, report_lines
 
 
 class DailyEngine:
@@ -130,6 +131,7 @@ class DailyEngine:
                         mapping.setdefault(thread, []).append(task['id'])
             content = {'day':day,'start':start.isoformat(),'end':end.isoformat(),
                        'tasks':tasks,'groups':groups,'mapping':mapping,'summaries':{},'git':{},'markdown':''}
+            content['evidence'] = period_records(tasks, start, end)
             self.store.save_report(day, 'pending', content, errors)
         taskmap = {t['id']:t for t in content['tasks']}
         issue_cache = {}
@@ -212,6 +214,7 @@ class DailyEngine:
                       '来源：codex://threads/'+thread,'消息数：'+str(len(messages)), '',
                       content['summaries'].get(thread,'文本摘要等待重试；带时间戳的原文已保存在本地报告数据库。'),'']
         if not content['groups']: lines += ['本周期没有可收集的用户/助手文本消息。','']
+        lines += report_lines(content.get('evidence', []))
         lines += ['## Git 每日留存','']
         for snapshot in content['git'].values():
             lines.append('- '+json.dumps(snapshot, ensure_ascii=False))
