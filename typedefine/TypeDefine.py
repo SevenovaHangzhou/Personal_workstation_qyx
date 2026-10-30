@@ -1,4 +1,4 @@
-APP_VERSION = "0.6.2"
+APP_VERSION = "0.9.0"
 CONTEXT_GROUP = "momo"
 CTX_DATA_PATH = "data_path"
 CTX_REVISION = "task_revision"

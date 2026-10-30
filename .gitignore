@@ -10,6 +10,9 @@ __pycache__/
 work/
 build/
 dist/
+release/**/*.deb
+release/**/*.tar.gz
+release/**/*.AppImage
 *.egg-info/
 
 # Machine-specific migration records and application data

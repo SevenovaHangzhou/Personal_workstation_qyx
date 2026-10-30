@@ -2,6 +2,7 @@
 import os
 import re
 import subprocess
+from process_environment import system_environment
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
@@ -41,7 +42,7 @@ def inspect_local(location):
     if not path.is_dir():
         raise ValueError("仓库目录不存在")
     # Ignore inherited repository selectors so inspection targets the chosen folder.
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env = {k: v for k, v in system_environment().items() if not k.startswith("GIT_")}
     env["GIT_OPTIONAL_LOCKS"] = "0"
     def git(*args):
         try:

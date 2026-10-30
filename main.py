@@ -1001,16 +1001,30 @@ class Momo(QMainWindow):
 
 def main():
     parser=argparse.ArgumentParser(description=APP_DISPLAY_NAME+" · 原生桌面任务与专注工具")
+    parser.add_argument('--version', action='version', version=APP_DISPLAY_NAME+' '+APP_VERSION)
+    parser.add_argument('--self-test', action='store_true', help='使用临时数据离线检查服务、学习资源和系统 Git，不调用模型')
     parser.add_argument("--data-dir",type=Path,help="指定本地数据目录")
     parser.add_argument("--screenshot",type=Path,help="保存主窗口截图后退出（支持 QT_QPA_PLATFORM=offscreen）")
     parser.add_argument("--screenshot-view",choices=["today","board","mini","attention","station"],default="today")
     args=parser.parse_args()
+    if args.self_test and (args.data_dir or args.screenshot):
+        parser.error('--self-test 始终使用临时数据，不能与 --data-dir 或 --screenshot 合用')
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling,True); QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps,True)
     app=QApplication(sys.argv[:1])
     # These identifiers locate existing user data; the visible brand is independent.
     app.setApplicationName("Momo"); app.setOrganizationName("MomoLocal"); app.setApplicationDisplayName(APP_DISPLAY_NAME)
     app.setWindowIcon(icon("orbit","#426c83",64)); app.setStyle("Fusion"); app.setFont(QFont("Noto Sans CJK SC",10)); app.setStyleSheet(STYLE)
     if QSystemTrayIcon.isSystemTrayAvailable(): app.setQuitOnLastWindowClosed(False)
+    if args.self_test:
+        from release_check import run_checks
+        try:
+            return run_checks(app, Momo)
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            return 1
+        finally:
+            api.shutdown()
     directory=args.data_dir or Path(QStandardPaths.writableLocation(QStandardPaths.AppDataLocation))
     runtime=MomoRuntime(directory/"tasks.json")
     try:

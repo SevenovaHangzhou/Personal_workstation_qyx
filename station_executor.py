@@ -8,6 +8,7 @@ import signal
 import subprocess
 import threading
 from pathlib import Path
+from process_environment import system_environment
 
 SCHEMA = {"type": "object", "properties": {
     "status": {"type": "string", "enum": ["review", "needs_input"]},
@@ -26,7 +27,7 @@ def git_snapshot(cwd: str) -> dict:
                       ("root", ["rev-parse", "--show-toplevel"])):
         try:
             result = subprocess.run(["git", "-C", cwd, *args], capture_output=True,
-                                    text=True, timeout=5)
+                                    text=True, timeout=5, env=system_environment())
             if result.returncode == 0:
                 values[key] = result.stdout.strip()
         except (OSError, subprocess.TimeoutExpired):
@@ -39,7 +40,7 @@ class CodexExecutor:
 
     def environment(self) -> dict:
         # Codex may use provider credentials from its existing environment.
-        env = {k: v for k, v in os.environ.items()
+        env = {k: v for k, v in system_environment().items()
                if not k.upper().startswith(("LINEAR_", "LIN_API"))}
         return env
 

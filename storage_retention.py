@@ -6,6 +6,7 @@ from pathlib import Path,PurePosixPath
 import shutil
 import stat
 import subprocess
+from process_environment import system_environment
 import threading
 import time
 import uuid
@@ -86,7 +87,7 @@ class Retention:
                     if self.signature(row['path'],plan['cutoff'])[0]!=row['stamp']:raise ValueError('文件已变化，停止本次清理')
                     os.rename(leaf,staged,src_dir_fd=sourcefd,dst_dir_fd=stagefd);moved=True
                     if self.signature(batch+'/'+staged,plan['cutoff'])[0]!=row['stamp']:raise ValueError('移动期间内容变化，恢复原位置')
-                    command=subprocess.run(['gio','trash','--',str(self.root/batch/staged)],capture_output=True,timeout=20)
+                    command=subprocess.run(['gio','trash','--',str(self.root/batch/staged)],capture_output=True,timeout=20,env=system_environment())
                     if command.returncode:raise OSError('系统回收站操作失败')
                     moved=False;result['trashed'].append(row['path'])
                 except (OSError,ValueError,subprocess.TimeoutExpired) as exc:

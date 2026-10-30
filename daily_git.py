@@ -9,6 +9,7 @@ import tarfile
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+from process_environment import system_environment
 
 
 class SnapshotError(RuntimeError):
@@ -16,7 +17,7 @@ class SnapshotError(RuntimeError):
 
 
 def git(root, *args):
-    env = {k: v for k,v in os.environ.items() if not k.startswith('GIT_')}
+    env = {k: v for k,v in system_environment().items() if not k.startswith('GIT_')}
     env['GIT_OPTIONAL_LOCKS'] = '0'
     try:
         result = subprocess.run(['git', '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null',

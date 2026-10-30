@@ -1,12 +1,15 @@
 """Select a real YomkServerPy runtime; never provide a substitute framework."""
 import importlib
 import os
-import platform
 import sys
 from pathlib import Path
 
 
 def load_framework():
+    if getattr(sys, 'frozen', False):
+        # The release contains a pinned runtime; a source-development prefix
+        # must not replace it with an incompatible Python ABI at launch.
+        return importlib.import_module('YomkApi')
     root = Path(__file__).resolve().parent
     common = root / "runtime" / "common"
     if common.is_dir():
@@ -23,10 +26,7 @@ def load_framework():
         except ModuleNotFoundError as exc:
             if exc.name != "YomkApi":
                 raise RuntimeError(f"已安装的 YomkServerPy 缺少依赖：{exc.name}") from exc
-        if sys.platform == "linux" and platform.machine() == "x86_64" and sys.version_info[:2] == (3, 10):
-            sys.path.insert(0, str(root / "runtime" / "linux-x86_64-py310"))
-        else:
-            sys.path.insert(0, str(root / "runtime" / "python"))
+        sys.path.insert(0, str(root / "runtime" / "python"))
     try:
         return importlib.import_module("YomkApi")
     except (ImportError, OSError) as exc:

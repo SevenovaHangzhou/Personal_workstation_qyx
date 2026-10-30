@@ -12,6 +12,7 @@ import sqlite3
 import time
 from pathlib import Path
 from typedefine.TypeDefine import APP_VERSION
+from station_executor import CodexExecutor
 
 
 class CodexError(Exception):
@@ -68,8 +69,7 @@ class CodexRpc:
         if not executable:
             raise CodexError("未找到 Codex CLI。请安装并登录 Codex，或使用下方链接手动关联。")
         try:
-            import os
-            env = dict(os.environ)
+            env = CodexExecutor().environment()
             self.process = subprocess.Popen([executable, "app-server", "--listen", "stdio://"],
                                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env)
             self.request("initialize", {"clientInfo": {"name": "momo_task_manager", "title": "ORBIT", "version": APP_VERSION},

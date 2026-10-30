@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 MOMO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-MOMO_LOG_DIR="${MOMO_LOG_DIR:-$MOMO_ROOT/.logs}"
+MOMO_LOG_DIR="${MOMO_LOG_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/orbit}"
 MOMO_LOG_FILE="$MOMO_LOG_DIR/startup.log"
 
 momo_finish() {
@@ -31,6 +31,9 @@ momo_finish() {
 }
 trap momo_finish EXIT
 mkdir -p -- "$MOMO_LOG_DIR"
+if [[ -f "$MOMO_LOG_FILE" ]] && (( $(stat -c %s -- "$MOMO_LOG_FILE") > 5242880 )); then
+    mv -- "$MOMO_LOG_FILE" "$MOMO_LOG_FILE.previous"
+fi
 exec > >(tee -a -- "$MOMO_LOG_FILE") 2>&1
 printf '\n[%s] 星序 ORBIT 启动\n' "$(date '+%Y-%m-%d %H:%M:%S')"
 
