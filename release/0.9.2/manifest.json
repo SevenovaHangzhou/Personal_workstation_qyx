@@ -1,0 +1,41 @@
+{
+  "version": "0.9.2",
+  "platform": "linux-x86_64",
+  "minimum_glibc": "2.35",
+  "source_commit": "cdf4fe6cd31cbf2f546ac1e5be8bb08fd89a0993",
+  "built_at": "2026-10-30T11:33:54.101068+00:00",
+  "python": "3.12.14",
+  "pyinstaller": "6.22.3",
+  "runtime_packages": {
+    "PyQt5": "5.15.11",
+    "PyQt5-Qt5": "5.15.19",
+    "PyQt5-sip": "12.20.0",
+    "readerwriterlock": "1.0.9",
+    "typing_extensions": "4.16.0",
+    "starlette": "0.52.1",
+    "anyio": "4.15.1",
+    "idna": "3.20"
+  },
+  "artifacts": [
+    {
+      "file": "orbit-0.9.2-linux-x86_64.tar.gz",
+      "bytes": 55998631,
+      "sha256": "6544f78e5fa25c1f358a6c96467dead44c031faf94d64d8c55197f124c6558d4"
+    },
+    {
+      "file": "sevenova-orbit_0.9.2_amd64.deb",
+      "bytes": 59694556,
+      "sha256": "719eaf8d4f6b14c37ffab1be16132eec4a82f8b9cc4f8c949591cd033ea30931"
+    }
+  ],
+  "verification": [
+    "frozen --version",
+    "frozen --self-test",
+    "offscreen startup/screenshot",
+    "extracted portable --self-test",
+    "extracted Debian --self-test",
+    "Debian-style command symlink --self-test"
+  ],
+  "user_data_included": false,
+  "codex_credentials_included": false
+}
