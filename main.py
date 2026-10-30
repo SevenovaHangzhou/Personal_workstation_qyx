@@ -833,6 +833,11 @@ class Momo(QMainWindow):
             index=next(i for i,b in enumerate(task["bindings"]) if b["url"]==binding["url"])
             binding=self.tasks.resolve_binding(task["id"],index)
         except (ValueError,OSError,StopIteration) as exc: QMessageBox.warning(self,"链接需要修正",str(exc)); return
+        if binding['kind']=='codex':
+            from codex_support import local_thread_state
+            state=local_thread_state(binding['url'].rsplit('/',1)[-1])
+            if state and state['missing']:
+                QMessageBox.warning(self,'聊天会话文件缺失','这个旧聊天的本机会话文件不存在，暂时无法继续。\n已保留任务和关联；重新建立可用聊天并替换此旧关联后再打开。');return
         if not QDesktopServices.openUrl(QUrl(binding["url"])):
             QMessageBox.information(self,"暂时无法打开","系统没有找到处理这个链接的应用。\n请检查 Codex 是否安装，或复制链接手动打开。\n\n"+binding["url"])
 

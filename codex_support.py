@@ -8,6 +8,7 @@ import re
 import select
 import shutil
 import subprocess
+import sqlite3
 import time
 from pathlib import Path
 from typedefine.TypeDefine import APP_VERSION
@@ -32,6 +33,25 @@ def thread_id(value):
     if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", value):
         raise CodexError("Codex 返回的聊天 ID 无效")
     return value
+
+
+def local_thread_state(identifier, home=None):
+    """Inspect known local metadata only; unknown schemas never prove emptiness."""
+    identifier=thread_id(identifier)
+    home=Path(home or os.environ.get('CODEX_HOME') or Path.home()/'.codex').expanduser()
+    try:
+        with sqlite3.connect((home/'state_5.sqlite').absolute().as_uri()+'?mode=ro',uri=True,timeout=.2) as database:
+            row=database.execute('SELECT rollout_path,cwd,has_user_event,tokens_used,first_user_message,preview FROM threads WHERE id=?',(identifier,)).fetchone()
+        if not row or not isinstance(row[0],str) or not Path(row[0]).is_absolute():return None
+        result=dict(path=row[0],cwd=row[1],missing=not Path(row[0]).is_file(),empty=False)
+        if not result['missing'] or row[2]!=0 or row[3]!=0 or row[4] or row[5]:return result
+    except (sqlite3.Error,OSError,ValueError):return None
+    try:
+        with sqlite3.connect((home/'thread_history_1.sqlite').absolute().as_uri()+'?mode=ro',uri=True,timeout=.2) as history:
+            result['empty']=all(history.execute('SELECT COUNT(*) FROM '+table+' WHERE thread_id=?',(identifier,)).fetchone()[0]==0
+                                for table in ('thread_turns','thread_items','thread_realtime_items'))
+    except (sqlite3.Error,OSError,ValueError):pass
+    return result
 
 
 class CodexRpc:
