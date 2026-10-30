@@ -25,7 +25,7 @@ Codex CLI 与 Git 使用本机安装和配置，包中不包含聊天、课程�
 使用已有应用依赖和 Python 3.12，另安装 [构建依赖](../packaging/requirements-build.txt)：
 
 ```bash
-.venv/bin/python -m pip install -r requirements.txt -r packaging/requirements-build.txt
+.venv/bin/python -m pip install -r packaging/requirements-release.txt -r packaging/requirements-build.txt
 .venv/bin/python scripts/build_release.py
 ```
 
