@@ -1,0 +1,43 @@
+{
+  "version": "0.9.3",
+  "full_regression": {
+    "tests": 277,
+    "result": "passed",
+    "phase": "0.9.2 before binary-download timeout patch"
+  },
+  "final_patch_tests": {
+    "ota": 26,
+    "release_entry": 3,
+    "result": "passed"
+  },
+  "package_checks": [
+    "frozen version",
+    "frozen offline self-test",
+    "offscreen startup",
+    "extracted portable offline self-test",
+    "extracted Debian offline self-test",
+    "Debian-style command symlink offline self-test"
+  ],
+  "ota_end_to_end": {
+    "version": "0.9.3",
+    "metadata": "local manifest/digests for pre-publication full package test",
+    "download_verification": true,
+    "isolated_probe": true,
+    "activation_on_exit": true,
+    "simulated_older_launcher": true,
+    "real_new_packaged_gui": true,
+    "health_marker_completed": true,
+    "exit_code": 0,
+    "user_data_modified": false
+  },
+  "live_download": {
+    "code_version": "0.9.3",
+    "asset_release": "0.9.2",
+    "verified": true
+  },
+  "limits": [
+    "No interactive desktop tray-host validation",
+    "No cross-distribution validation"
+  ],
+  "real_user_data_modified": false
+}
