@@ -1,0 +1,27 @@
+{
+  "framework": "YomkServerPy",
+  "version": "1.5.6",
+  "commit": "abe3b8220eae015232f5ddef37160e59d90a4e6e",
+  "runtime_abi": "Linux x86_64 / CPython 3.10 / Ubuntu 22.04 build",
+  "readerwriterlock": "1.0.9 (installed); legacy fallback common=1.0.10",
+  "files": {
+    "runtime/common/licenses/typing_extensions/LICENSE": "3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf",
+    "runtime/common/readerwriterlock/LICENSE.txt": "181333259bbbe37f2d3a817e4fdeb15d94526f8aa0b6da4e4cb9e45c671f345e",
+    "runtime/common/readerwriterlock/__init__.py": "7f0b7586e45498e41a80af8736a5f6e1bf8d6dc8ff297d9608dacc3ea8a70ae1",
+    "runtime/common/readerwriterlock/py.typed": "c479f82f743256a0dfd3b243f7a5da75acf3a86fa45ea4d94047e0d639803077",
+    "runtime/common/readerwriterlock/rwlock.py": "bf5271d81d811700767cca7c2825a841425dbb95b123ac6eb42b40355075937e",
+    "runtime/common/readerwriterlock/rwlock_async.py": "42ad27731d156925fc45759f83534d5e7bf68451035b2ff8346b1be88d9d6162",
+    "runtime/common/typing_extensions.py": "4040ca1a1ecbee00d1385c12a93084d1c5bd46f0b774f07e5ae7e91c4f55e696",
+    "runtime/linux-x86_64-py310/YomkApi.py": "d2f57ee108a4d78b4e97efecded602b2579db583a89b424f9ea927b509e59579",
+    "runtime/linux-x86_64-py310/YomkServerPy.pyi": "a70c2be63df7e8eec4cb7b875850f6fb1242edc6c8fcde85a4c7dccaeaa24fa6",
+    "runtime/linux-x86_64-py310/YomkServerPy.so": "7f14476c5f75c752e841e73956ef0869490b2700889c6c05d83cd286212746bc",
+    "runtime/linux-x86_64-py310/YomkServerPyVersion.py": "ffa5803ebef9c7d92650b46bfe94da1d76108babce11536a1f4d4293d93c6896",
+    "runtime/linux-x86_64-py310/abi_report.txt": "e34c0501d80850041a44da485ccd86c98ad6dd61b85147724b13317880d6de92",
+    "runtime/python/YomkServerPyVersion.py": "ffa5803ebef9c7d92650b46bfe94da1d76108babce11536a1f4d4293d93c6896",
+    "runtime/python/YomkServerPy.py": "728a0b21f6fc9a1c490015008c8c70564c3888be06e001fc14f274b06e65013a",
+    "runtime/python/YomkApi.py": "d2f57ee108a4d78b4e97efecded602b2579db583a89b424f9ea927b509e59579"
+  },
+  "typing_extensions": "4.16.0",
+  "verification": "0.6.0: actual Python source runtimes 1.5.6 and pinned Work Station 1.4.20 tested on CPython 3.12.14; no Cython compilation in this integration.",
+  "active_runtime": "runtime/python; Python 3.11+"
+}

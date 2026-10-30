@@ -1,0 +1,845 @@
+"""
+Station 基础路由 — 健康/错误/角色/注册心跳/主机网络/Director (P1 #2 拆分产物)
+
+始终可用的基础层端点 (不依赖 Secretary 激活):
+  - F1.2 健康检查与自愈重启 / F1.4 错误追踪
+  - Secretary 激活/停用/角色查询
+  - Worker 注册/心跳、mesh token 下发、S2 版本升级提醒
+  - 主机/网络/发现查询、Station Director 舰队管理
+  - 远程 Secretary 分配/撤销/状态/角色查询
+"""
+import threading
+import time
+
+import requests as http_requests
+
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
+
+from .protocol import HostInfo
+from .event_bus import publish_event
+from .http_retry import auth_headers
+from .logger import get_logger
+from .station_routes_common import (
+    _broadcast, _merge_db_and_udp_hosts, get_mesh_auth_token,
+    mesh_auth_enabled,
+)
+
+logger = get_logger("station_api")
+
+
+def build_basic_routes(controller) -> APIRouter:
+    """基础路由 (始终可用): 健康/角色/注册心跳/主机/Director。"""
+    router = APIRouter()
+
+    # 便捷别名
+    db = controller.db
+    state = controller.state
+    shared_folder = controller.state.shared_folder
+    station_director = controller.station_director
+
+    # ════════════════════════════════════════════════════════════
+    #  F1.2: 健康检查端点
+    # ════════════════════════════════════════════════════════════
+
+    @router.get("/health")
+    async def health_check():
+        """F1.2: 系统健康检查端点。
+
+        返回各组件状态、资源使用、运行时间。
+        用于外部监控 / 自愈重启判断 / 负载均衡探活。
+        """
+        import os
+        import shutil
+        import psutil
+
+        proc = psutil.Process(os.getpid())
+        mem_mb = proc.memory_info().rss / (1024 * 1024)
+        uptime_secs = time.time() - controller._start_timestamp
+
+        # 磁盘使用
+        try:
+            disk = shutil.disk_usage(str(controller.state.shared_folder.path))
+            disk_percent = round(disk.used / disk.total * 100, 1)
+        except Exception:
+            disk_percent = -1
+
+        # 活跃任务数
+        try:
+            all_tasks = (await run_in_threadpool(db.list_tasks))
+            active_tasks = len([t for t in all_tasks if getattr(t, 'status', '') in ("pending", "running", "monitoring")])
+        except Exception:
+            active_tasks = 0
+
+        status = "healthy"
+        if mem_mb > 1024:
+            status = "degraded"
+        if disk_percent > 90:
+            status = "critical"
+
+        return {
+            "status": status,
+            "uptime_secs": round(uptime_secs, 1),
+            "timestamp": time.time(),
+            "components": {
+                "station": "active",
+                "secretary": "active" if controller.secretary_active else "inactive",
+                "discovery": "active" if controller.discovery else "inactive",
+                "local_pm": "active" if controller._local_pm_agent else "idle",
+                "bot_gateway": "active" if controller.bot_gateway and controller.bot_gateway._channels else "idle",
+            },
+            "resources": {
+                "memory_mb": round(mem_mb, 1),
+                "cpu_percent": proc.cpu_percent(interval=0.1),
+                "disk_percent": disk_percent,
+                "threads": threading.active_count(),
+            },
+            "workload": {
+                "active_tasks": active_tasks,
+                "active_pms": 1 if controller._local_pm_agent else 0,
+                "ws_clients": len(state.ws_clients),
+            },
+        }
+
+    @router.post("/health/restart")
+    async def request_restart():
+        """F1.2: 触发自愈重启 (graceful)。"""
+        (await run_in_threadpool(controller.request_restart, 'manual_health_restart'))
+        return {"ok": True, "message": "重启已调度, 服务将在 3 秒后关闭"}
+
+    # ════════════════════════════════════════════════════════════
+    #  F1.4: 错误追踪端点
+    # ════════════════════════════════════════════════════════════
+
+    @router.get("/api/errors/stats")
+    async def error_stats():
+        """F1.4: 错误统计摘要。"""
+        from .error_tracker import error_tracker
+        return error_tracker.get_stats()
+
+    @router.get("/api/errors/recent")
+    async def error_recent(limit: int = 20, module: str = ""):
+        """F1.4: 最近错误记录。"""
+        from .error_tracker import error_tracker
+        return {"errors": error_tracker.get_recent(limit=min(limit, 100), module=module)}
+
+    @router.get("/api/errors/diagnosis")
+    async def error_diagnosis(window: int = 200, source: str = "buffer"):
+        """iter-46 (F4.2): 错误自愈诊断建议 (模式规则表分组)。
+
+        iter-48: source=history 改诊断 error_log 持久化记录 (重启后不断档);
+        默认 buffer 行为不变。
+        """
+        from .error_tracker import error_tracker, diagnose_records
+        if source == "history":
+            records = (await run_in_threadpool(db.query_error_history, limit=min(window, 500)))
+            return diagnose_records(records)
+        return error_tracker.diagnose(window_records=window)
+
+    @router.get("/api/errors/history")
+    async def error_history(limit: int = 50, module: str = ""):
+        """iter-47: 持久化错误历史 (error_log 表, 跨重启保留)。"""
+        return {"errors": (await run_in_threadpool(db.query_error_history, limit=min(limit, 200), module=module))}
+
+    @router.post("/api/errors/heal")
+    async def error_heal(action: str, category: str = ""):
+        """iter-49 (F4.2 修复环节): 执行自愈动作并落盘 heal_log。
+
+        iter-60: rotate_key/switch_pool 升级为真实修复写动作 (失效/耗尽池
+        自动暂停/剔除), 直接透传; 未注册动作返回 manual_required (需人工介入)。
+        """
+        return (await run_in_threadpool(controller.run_heal_action, action, category))
+
+    @router.get("/api/errors/heal/history")
+    async def error_heal_history(limit: int = 50):
+        """iter-49: 自愈动作执行历史 (heal_log 表, 跨重启保留)。"""
+        return {"heals": (await run_in_threadpool(db.query_heal_history, limit=min(limit, 200)))}
+
+    @router.get("/api/errors/heal/status")
+    async def error_heal_status():
+        """iter-50: 自动自愈守护状态 (开关/周期/冷却/累计轮次/最近动作)。"""
+        return (await run_in_threadpool(controller.get_auto_heal_status))
+
+    @router.post("/api/errors/heal/auto-check")
+    async def error_heal_auto_check():
+        """iter-50: 手动触发一轮自动自愈扫描 (与守护线程同逻辑)。"""
+        return (await run_in_threadpool(controller._auto_heal_once))
+
+    # ════════════════════════════════════════════════════════════
+    #  角色激活端点
+    # ════════════════════════════════════════════════════════════
+
+    @router.post("/api/station/activate-secretary")
+    async def activate_secretary():
+        """激活 Secretary 模式 (同进程加载项目管理组件)。"""
+        result = (await run_in_threadpool(controller.activate_secretary))
+        if result.get("ok"):
+            controller.secretary_host_id = controller.state.device_id
+            controller.secretary_host_port = controller.state.api_port
+            await _broadcast(state, "secretary_assigned", {
+                "device_id": controller.state.device_id,
+                "port": controller.state.api_port,
+            })
+        await _broadcast(state, "secretary_activated", result)
+        (await run_in_threadpool(controller.bot_gateway.notify, 'secretary_activated', {'port': controller.state.api_port}))
+        return result
+
+    @router.post("/api/station/deactivate-secretary")
+    async def deactivate_secretary():
+        """停用 Secretary 模式。"""
+        result = (await run_in_threadpool(controller.deactivate_secretary))
+        controller.secretary_host_id = None
+        controller.secretary_host_port = None
+        await _broadcast(state, "secretary_revoked", {"device_id": controller.state.device_id})
+        await _broadcast(state, "secretary_deactivated", result)
+        (await run_in_threadpool(controller.bot_gateway.notify, 'secretary_deactivated', {}))
+        return result
+
+    @router.get("/api/station/roles")
+    async def get_roles():
+        """查询当前激活的角色。"""
+        return {
+            "station": "active",
+            "secretary": "active" if controller.secretary_active else "inactive",
+            "components": {
+                "project_manager": controller.project_manager is not None,
+                "chat_handler": controller.chat_handler is not None,
+                "model_router": controller.model_router is not None,
+                "mcp_gateway": controller.mcp_gateway is not None,
+            },
+        }
+
+    # ════════════════════════════════════════════════════════════
+    #  Worker 注册 / 心跳 (始终可用)
+    # ════════════════════════════════════════════════════════════
+
+    @router.post("/api/register")
+    async def register_worker(payload: dict):
+        """接收 Worker 的注册请求 (完整 HostInfo)。"""
+        info = HostInfo.from_dict(payload)
+        record = (await run_in_threadpool(station_director.on_host_registered, info))
+        await _broadcast(state, "host_registered", record.to_dict())
+        (await run_in_threadpool(controller.bot_gateway.notify, 'host_online', {'device_name': record.device_name or record.hostname or '未知', 'ip': record.ip or ''}))
+        result = {"ok": True, "device_id": info.device_id}
+        # Phase 0: 向新节点下发 mesh token — S1 起无论认证开关都下发
+        # (加密信任根与认证开关解耦; 认证启用时它同时是传输校验凭证)
+        from .auth import get_mesh_token
+        result["mesh_token"] = get_mesh_auth_token() or get_mesh_token()
+        logger.info("已向新节点下发 mesh token: %s", info.device_id[:8])
+        # S1: 注册成功后后台推送加密资源密钥 (新节点上线即武装,
+        # 不阻塞注册响应; 发现信息可能尚未入库, 传入回退地址)
+        threading.Thread(
+            target=controller.push_resource_secrets,
+            args=(info.device_id,),
+            kwargs={"fallback_ip": record.ip,
+                    "fallback_port": info.api_port},
+            daemon=True, name="secret-sync-register",
+        ).start()
+        return result
+
+    @router.get("/api/station/auth-token")
+    async def get_auth_token(request: Request):
+        """Phase 0: Web UI 引导获取 mesh token (认证启用时)。
+
+        信任根: 能访问 Web UI 的局域网成员视为内网成员, 凭此 token 操作 API。
+        认证关闭时返回空字符串 (前端不附加认证头)。
+
+        iter-58 (F5.2): 请求带用户个人 token 时回显该用户角色/名称
+        (SPA 登录后展示角色并禁用越权按钮); 否则回显默认 boss
+        (mesh token 持有人 = boss, 向后兼容)。
+        多用户模式安全收紧: 配置了用户表时, 仅 boss 身份可获得
+        mesh_token (防止低角色从引导端点提权); 未登录回显空角色。
+        """
+        from .station_routes_common import (
+            resolve_role, list_users_public, users_configured,
+        )
+        token = get_mesh_auth_token()
+        auth_header = request.headers.get("Authorization", "")
+        identity = None
+        if auth_header.startswith("Bearer "):
+            identity = resolve_role(auth_header[7:])
+        if users_configured():
+            # 多用户模式: 已登录 → 回显自身角色; 未登录 → 空角色
+            # (SPA 展示「未登录」); mesh token 仅 boss 可获。
+            role_info = identity or {"name": "", "role": ""}
+            grant_mesh = bool(identity and identity["role"] == "boss")
+        else:
+            # 单人模式 (向后兼容): 默认 boss + 下发 mesh token
+            role_info = identity or {"name": "Boss", "role": "boss"}
+            grant_mesh = True
+        return {
+            "auth_enabled": mesh_auth_enabled(),
+            "mesh_token": token if mesh_auth_enabled() and grant_mesh else "",
+            "role": role_info["role"],
+            "name": role_info["name"],
+            "users": list_users_public(),
+        }
+
+    @router.get("/api/station/bootstrap-token")
+    async def bootstrap_token():
+        """S1: mesh token 引导端点 — Station 间无注册链路, 非 Secretary
+        节点启动选举时从此处拉取信任根并持久化 (与注册下发同一
+        信任假设: 能触及本端口的局域网成员视为内网成员)。
+        """
+        from .auth import get_mesh_token
+        return {"mesh_token": get_mesh_auth_token() or get_mesh_token()}
+
+    # ── 联邦 (iter-64 F3.4 跨网段多 Secretary) ──────────────
+
+    @router.get("/api/federation/info")
+    async def federation_info():
+        """F3.4 (iter-64): 联邦信息端点 — 供对端联邦节点轮询。
+
+        返回本机身份与网段主机摘要 (含远端联邦主机, 实现多级转发
+        可视化)。mesh token 认证由 api_guard 中间件完成。
+        """
+        try:
+            from .version_sync import local_version_info
+            ver = local_version_info()
+        except Exception:
+            ver = {}
+        hosts = [h.to_dict() for h in (await run_in_threadpool(db.list_hosts))]
+        return {
+            "device_id": state.device_id,
+            "device_name": state.device_name,
+            "role": "secretary" if controller.secretary_active else "station",
+            "api_port": state.api_port,
+            "secretary_active": bool(controller.secretary_active),
+            "code_version": ver.get("commit", ""),
+            "version_ts": ver.get("commit_time", 0.0),
+            "hosts": hosts,
+        }
+
+    @router.post("/api/federation/tasks/forward")
+    async def federation_task_forward(request: Request):
+        """F3.4 (iter-65): 联邦任务委托入口 — 对端 Secretary 提交任务本网段执行。
+
+        对端全权接管 (本网段选站/执行/交付), 不回调来源侧。
+        mesh token 认证由 api_guard 中间件完成。
+        """
+        payload = await request.json()
+        task_data = payload.get("task_data") or {}
+        forwarded_from = payload.get("forwarded_from", "")
+        created_by = (f"federation:{forwarded_from[:8]}" if forwarded_from
+                      else "federation")
+        # iter-65 防环: 委托任务的 _federation_relay 标记透传给选站 (跳数上限 1)
+        fed_relay = bool((task_data.get("input_data") or {}).get("_federation_relay"))
+        result = await run_in_threadpool(controller.submit_task_from_chat,
+            name=task_data.get("name", "联邦任务"),
+            description=task_data.get("description", ""),
+            created_by=created_by,
+            priority=(task_data.get("input_data") or {}).get("_priority", "normal"),
+            fed_relay=fed_relay,
+            input_data=task_data.get("input_data") or {},
+            project_id=task_data.get("project_id", ""),
+        )
+        logger.info("联邦委托任务入口: %s (来自 %s)",
+                    result.get("task_id", ""), forwarded_from[:8])
+        return {"ok": True, "task_id": result.get("task_id", "")}
+
+    # ── 用户管理 (iter-63 团队场景深化) ─────────────────────
+    # 写端点经 api_guard 角色检查 (管理员路径 /api/station/ 仅 boss 可写),
+    # 读端点全角色放行但仅 boss 可见 token 尾 4 位快照。
+
+    @router.get("/api/station/users")
+    async def list_users(request: Request):
+        """用户列表: boss 含 token 尾 4 位 (轮换核对用); 其余角色脱敏。"""
+        from .station_routes_common import (
+            list_users_admin, list_users_public, resolve_role,
+        )
+        auth_header = request.headers.get("Authorization", "")
+        identity = resolve_role(auth_header[7:]) if auth_header.startswith("Bearer ") else None
+        if identity and identity["role"] == "boss":
+            return {"users": list_users_admin(), "admin_view": True}
+        return {"users": list_users_public(), "admin_view": False}
+
+    @router.post("/api/station/users")
+    async def create_user_endpoint(request: Request):
+        """新增用户 (boss): 生成 token, 仅本次响应返回明文。"""
+        from .station_routes_common import create_user
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="非法报文")
+        name = str(body.get("name", "")).strip()
+        role = str(body.get("role", "viewer")).strip().lower()
+        result = create_user(name, role)
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        logger.info("[Station] 新增用户: %s (role=%s)", name, role)
+        return result
+
+    @router.put("/api/station/users/{name}/role")
+    async def update_user_role(name: str, request: Request):
+        """修改用户角色 (boss, 最后 boss 保护)。"""
+        from .station_routes_common import set_user_role
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="非法报文")
+        role = str(body.get("role", "")).strip().lower()
+        result = set_user_role(name, role)
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        logger.info("[Station] 用户角色变更: %s -> %s", name, role)
+        return result
+
+    @router.post("/api/station/users/{name}/rotate-token")
+    async def rotate_user_token_endpoint(name: str):
+        """轮换用户 token (boss): 旧 token 立即失效, 新明文仅返回一次。"""
+        from .station_routes_common import rotate_user_token
+        result = rotate_user_token(name)
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        logger.info("[Station] 用户 token 已轮换: %s", name)
+        return result
+
+    @router.delete("/api/station/users/{name}")
+    async def delete_user_endpoint(name: str):
+        """移除用户 (boss, 最后 boss 保护)。"""
+        from .station_routes_common import remove_user
+        result = remove_user(name)
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        logger.info("[Station] 移除用户: %s", name)
+        return result
+
+    # ── S2: 版本升级提醒 ─────────────────────────────────────
+
+    @router.get("/api/version")
+    async def get_version():
+        """S2: 返回本机代码版本信息 (VERSION.json 记录 + git HEAD)。"""
+        from .version_sync import local_version_info
+        return local_version_info()
+
+    @router.post("/api/version/upgrade-notice")
+    async def upgrade_notice(request: Request):
+        """S2: 接收领先节点的升级提醒 — 记录日志并发布事件 (Web Toast/横幅)。
+
+        白名单放行 (与 /api/heartbeat 同一信任假设): 能触及本端口的
+        局域网成员视为内网成员; 提醒内容仅展示, 不触发任何自动操作。
+        """
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"ok": False, "error": "非法报文"}, status_code=400)
+        if not isinstance(body, dict) or not body.get("commit"):
+            return JSONResponse({"ok": False, "error": "缺少 commit 字段"}, status_code=400)
+        from_name = body.get("from_name") or "未知主机"
+        commit = body.get("commit", "")
+        hint = body.get("upgrade_hint") or "git pull 升级后重启节点"
+        logger.warning("[S2] 收到升级提醒: %s 版本领先 (%s), %s",
+                       from_name, commit, hint)
+        # F1: 角色无关版本对齐 — 落后节点自动 git pull + 依赖安装
+        try:
+            if controller and getattr(controller, "auto_upgrade_enabled", True):
+                (await run_in_threadpool(controller._auto_upgrade, commit, from_name))
+        except Exception as e:
+            logger.warning("[F1] 自动升级触发失败: %s", e)
+        publish_event("version_upgrade_notice", {
+            "behind": True,
+            "from_name": from_name,
+            "commit": commit,
+            "version": body.get("version", ""),
+            "note": body.get("note", ""),
+            "hint": hint,
+        })
+        return {"ok": True}
+
+    @router.post("/api/heartbeat")
+    async def heartbeat(payload: dict):
+        """接收 Worker 心跳 (实时资源使用率)。"""
+        device_id = payload.get("device_id", "")
+        record = (await run_in_threadpool(station_director.on_heartbeat, device_id, {'cpu_percent': payload.get('cpu_percent'), 'memory_percent': payload.get('memory_percent'), 'disk_percent': payload.get('disk_percent'), 'shared_file_count': payload.get('shared_file_count')}))
+        if not record:
+            raise HTTPException(status_code=404, detail="设备未注册")
+        await _broadcast(state, "heartbeat", record.to_dict())
+        return {"ok": True}
+
+    # ════════════════════════════════════════════════════════════
+    #  主机 / 网络查询 (始终可用)
+    # ════════════════════════════════════════════════════════════
+
+    @router.get("/api/hosts")
+    async def list_hosts():
+        """返回所有注册主机列表 (DB 持久化 + UDP 发现合并)。"""
+        all_hosts = _merge_db_and_udp_hosts(db, controller.discovery)
+        return {
+            "hosts": [h.to_dict() for h in all_hosts],
+            "total": len(all_hosts),
+            "online": sum(1 for h in all_hosts if h.online),
+        }
+
+    @router.get("/api/hosts/{device_id}")
+    async def get_host(device_id: str):
+        """查询单台主机详情。"""
+        record = (await run_in_threadpool(db.get_host, device_id))
+        if not record:
+            dev = (await run_in_threadpool(controller.discovery.find_device, device_id))
+            if not dev:
+                raise HTTPException(status_code=404, detail="主机不存在")
+            return dev
+        return record.to_dict()
+
+    @router.get("/api/network")
+    async def get_network():
+        """返回本机网络状态。"""
+        ns = (await run_in_threadpool(controller.discovery.network_status))
+        return {
+            "udp_port": ns.udp_port,
+            "api_port": ns.api_port,
+            "local_ips": ns.local_ips,
+            "broadcast_targets": ns.broadcast_targets,
+        }
+
+    @router.get("/api/discovery")
+    async def get_discovery():
+        """返回 UDP 发现到的所有设备 (实时)。"""
+        return {
+            "devices": (await run_in_threadpool(controller.discovery.list_devices)),
+            "total": len(controller.discovery._devices),
+        }
+
+    @router.post("/api/probe/{ip}")
+    async def probe_ip(ip: str):
+        """主动探测指定 IP。"""
+        (await run_in_threadpool(controller.discovery.probe_ip, ip))
+        return {"ok": True, "message": f"已向 {ip} 发送探测包"}
+
+    @router.get("/api/health")
+    async def health():
+        """健康检查。"""
+        return {
+            "status": "ok",
+            "role": "station",
+            "secretary_active": controller.secretary_active,
+            "uptime": time.time() - state.start_time,
+            "device_id": state.device_id,
+        }
+
+    @router.post("/api/health/restart")
+    async def restart_system():
+        """触发系统自愈重启。"""
+        import threading
+        import time
+
+        def delayed_restart():
+            time.sleep(1)  # 等待响应发送
+            import os
+            import sys
+            logger.info("正在执行自愈重启...")
+            os.execv(sys.executable, ['python'] + sys.argv)
+
+        thread = threading.Thread(target=delayed_restart)
+        thread.daemon = True
+        thread.start()
+
+        return {"ok": True, "message": "重启已触发"}
+
+    @router.get("/api/station-info")
+    async def station_info():
+        """返回 Station Director 自身的主机信息。"""
+        return (await run_in_threadpool(controller._collect_info)).to_dict()
+
+    @router.get("/api/shared")
+    async def list_shared():
+        """列出共享文件夹内容。"""
+        return {
+            "folder": str(shared_folder.path),
+            "files": (await run_in_threadpool(shared_folder.list_files)),
+            "file_count": (await run_in_threadpool(shared_folder.file_count)),
+        }
+
+    # ════════════════════════════════════════════════════════════
+    #  Station Director API (始终可用)
+    # ════════════════════════════════════════════════════════════
+
+    @router.get("/api/station/fleet")
+    async def get_fleet():
+        """舰队概览: 在线/离线/各评级分布 + 主机列表 (DB + UDP 合并)。"""
+        all_hosts = _merge_db_and_udp_hosts(db, controller.discovery)
+        online_count = sum(1 for h in all_hosts if h.online)
+        offline_count = len(all_hosts) - online_count
+        tiers = {"S": 0, "A": 0, "B": 0, "C": 0, "D": 0}
+        for h in all_hosts:
+            if h.rating_tier in tiers:
+                tiers[h.rating_tier] += 1
+        return {
+            "total": len(all_hosts),
+            "online": online_count,
+            "offline": offline_count,
+            "tiers": tiers,
+            "hosts": [h.to_dict() for h in all_hosts],
+        }
+
+    @router.get("/api/station/hosts")
+    async def get_station_hosts(min_tier: str = "D", online_only: bool = False):
+        """所有主机列表 (含评级+状态), 可按评级筛选。"""
+        if online_only:
+            return {"hosts": (await run_in_threadpool(station_director.get_hosts_by_tier, min_tier, online_only=True))}
+        return {"hosts": (await run_in_threadpool(station_director.get_all_hosts))}
+
+    @router.get("/api/station/hosts/{device_id}/events")
+    async def get_host_events(device_id: str, limit: int = 20):
+        """单台主机出入站事件历史。"""
+        return {"events": (await run_in_threadpool(station_director.get_host_events, device_id, limit))}
+
+    @router.get("/api/station/events")
+    async def get_station_events(limit: int = 50):
+        """最近全站事件流。"""
+        return {"events": (await run_in_threadpool(station_director.get_host_events, None, limit))}
+
+    @router.post("/api/station/rate")
+    async def recompute_ratings():
+        """手动触发重新评级所有在线主机。"""
+        updated = (await run_in_threadpool(station_director.recompute_ratings))
+        return {"ok": True, "updated": updated}
+
+    @router.get("/api/station/stats")
+    async def get_station_stats():
+        """统计摘要。"""
+        return (await run_in_threadpool(station_director.get_fleet_summary))
+
+    # ── 远程 Secretary 分配 (指定主机运行秘书) ───────────────────────
+
+    @router.post("/api/station/hosts/{device_id}/assign-secretary")
+    async def assign_secretary_to_host(device_id: str, payload: dict = None):
+        """指定主机运行 Secretary。
+
+        - 本机 (Station Director): 进程内激活
+        - 远程主机: 发送 HTTP 到 Worker, 启动 Secretary 子进程
+        """
+        host = (await run_in_threadpool(db.get_host, device_id))
+        if not host:
+            raise HTTPException(status_code=404, detail="主机不存在")
+        if not host.online:
+            raise HTTPException(status_code=400, detail="主机离线,无法分配")
+
+        port = (payload or {}).get("port")
+
+        # 本机 → 进程内激活
+        if device_id == controller.state.device_id:
+            result = (await run_in_threadpool(controller.activate_secretary))
+            if result.get("ok"):
+                controller.secretary_host_id = device_id
+                controller.secretary_host_port = controller.state.api_port
+            return result
+
+        # 远程主机 → HTTP 调用 Worker
+        if not host.ip:
+            raise HTTPException(status_code=400, detail="主机 IP 未知")
+
+        try:
+            resp = (await run_in_threadpool(http_requests.post, f'http://{host.ip}:{host.api_port}/role/start-secretary', json={'port': port} if port else {}, headers=auth_headers(), timeout=10))
+            if resp.status_code == 200:
+                data = resp.json()
+                controller.secretary_host_id = device_id
+                controller.secretary_host_port = data.get("port")
+                await _broadcast(state, "secretary_assigned", {
+                    "device_id": device_id, "port": data.get("port")
+                })
+                return data
+            else:
+                detail = resp.json().get("detail", "远程启动失败")
+                raise HTTPException(status_code=resp.status_code, detail=detail)
+        except http_requests.RequestException as e:
+            raise HTTPException(status_code=502, detail=f"无法连接到主机 {host.ip}:{host.api_port}: {e}")
+
+    @router.post("/api/station/hosts/{device_id}/revoke-secretary")
+    async def revoke_secretary_from_host(device_id: str):
+        """撤销主机的 Secretary 角色。
+
+        - 本机: 进程内停用
+        - 远程主机: 发送 HTTP 到 Worker, 停止 Secretary 子进程
+        """
+        host = (await run_in_threadpool(db.get_host, device_id))
+        if not host:
+            raise HTTPException(status_code=404, detail="主机不存在")
+
+        # 本机 → 进程内停用
+        if device_id == controller.state.device_id:
+            result = (await run_in_threadpool(controller.deactivate_secretary))
+            controller.secretary_host_id = None
+            controller.secretary_host_port = None
+            await _broadcast(state, "secretary_revoked", {"device_id": device_id})
+            return result
+
+        # 远程主机 → HTTP 调用 Worker
+        try:
+            resp = (await run_in_threadpool(http_requests.post, f'http://{host.ip}:{host.api_port}/role/stop-secretary', headers=auth_headers(), timeout=10))
+            if resp.status_code == 200:
+                controller.secretary_host_id = None
+                controller.secretary_host_port = None
+                await _broadcast(state, "secretary_revoked", {"device_id": device_id})
+                return resp.json()
+            else:
+                return resp.json()
+        except http_requests.RequestException as e:
+            raise HTTPException(status_code=502, detail=f"无法连接到主机: {e}")
+
+    @router.get("/api/station/secretary-status")
+    async def get_secretary_status():
+        """查询当前 Secretary 分配状态。
+
+        返回哪台主机正在运行 Secretary, 以及其端口。
+        """
+        host_id = getattr(controller, 'secretary_host_id', None)
+        host_port = getattr(controller, 'secretary_host_port', None)
+        host_name = None
+        if host_id:
+            host = (await run_in_threadpool(db.get_host, host_id))
+            if host:
+                host_name = host.device_name
+
+        return {
+            "secretary_host_id": host_id,
+            "secretary_host_name": host_name,
+            "secretary_port": host_port,
+            "active": host_id is not None,
+            "is_local": host_id == controller.state.device_id if host_id else False,
+        }
+
+    @router.get("/api/station/hosts/{device_id}/role")
+    async def get_host_role(device_id: str):
+        """查询指定主机的角色状态 (含远程 Secretary 子进程状态)。"""
+        host = (await run_in_threadpool(db.get_host, device_id))
+        if not host:
+            raise HTTPException(status_code=404, detail="主机不存在")
+
+        # 本机
+        if device_id == controller.state.device_id:
+            return {
+                "device_id": device_id,
+                "is_station": True,
+                "secretary_active": controller.secretary_active,
+                "secretary_in_process": True,
+            }
+
+        # 远程主机 → 查询 Worker
+        secretary_assigned = (getattr(controller, 'secretary_host_id', None) == device_id)
+        remote_status = {"running": False}
+        if host.online and host.ip:
+            try:
+                resp = (await run_in_threadpool(http_requests.get, f'http://{host.ip}:{host.api_port}/role/status', headers=auth_headers(), timeout=5))
+                if resp.status_code == 200:
+                    remote_status = resp.json()
+            except http_requests.RequestException:
+                pass
+
+        return {
+            "device_id": device_id,
+            "is_station": False,
+            "secretary_assigned": secretary_assigned,
+            "secretary_running": remote_status.get("running", False),
+            "secretary_port": remote_status.get("port"),
+            "secretary_pid": remote_status.get("pid"),
+        }
+
+    # ════════════════════════════════════════════════════════════
+    #  P0/P1: 运行时性能追踪端点
+    # ════════════════════════════════════════════════════════════
+
+    @router.get("/api/runtime/metrics")
+    async def runtime_metrics(hours: float = 1.0):
+        """P1: LLM 调用性能指标 (SQLite 聚合, 最近 N 小时)。
+
+        返回: 调用次数、平均/P99 延迟、Token 用量、按模型/状态拆分。
+        """
+        hours = max(0.1, min(hours, 168))  # 0.1h ~ 7d
+        return (await run_in_threadpool(db.query_llm_metrics, hours=hours))
+
+    @router.get("/api/runtime/trace")
+    async def runtime_trace_log(limit: int = 50, type: str = ""):
+        """P0: 最近 JSONL 追踪记录 (子任务执行 + LLM 调用)。
+
+        Args:
+            limit: 返回条数 (上限 200)
+            type: 过滤类型 ("llm_call" / "subtask_end" / ""全部)
+        """
+        from .runtime_trace import read_trace_lines
+        limit = max(1, min(limit, 200))
+        return {"records": read_trace_lines(limit=limit, line_type=type)}
+
+    @router.get("/api/runtime/calls")
+    async def runtime_call_log(limit: int = 50):
+        """P1: LLM 调用明细 (SQLite 最近 N 条, 调试/排查用)。"""
+        limit = max(1, min(limit, 200))
+        return {"calls": (await run_in_threadpool(db.query_llm_recent, limit=limit))}
+
+    @router.get("/api/runtime/stats")
+    async def runtime_stats(hours: float = 1.0):
+        """P0: JSONL 追踪统计 (子任务成功率、模型分布、错误 Top5)。
+
+        与 /api/runtime/metrics 互补: metrics 走 SQLite 审计表,
+        stats 走 JSONL 文件 (含子任务执行层数据)。
+        """
+        from .runtime_trace import trace_stats
+        hours = max(0.1, min(hours, 168))
+        return trace_stats(hours=hours)
+
+    @router.get("/api/runtime/task-flow")
+    async def runtime_task_flow(task_id: str, limit: int = 200):
+        """P3: 任务流瀑布 — 按 task_id 聚合生命周期阶段时间线。
+
+        返回: 各阶段事件 (提交/规划/执行/子任务结果/交付/失败)
+        + 阶段间隔 (gap_ms) + 总耗时。
+        """
+        from .runtime_trace import task_flow_waterfall
+        if not task_id or len(task_id) > 64:
+            raise HTTPException(status_code=400, detail="task_id 必填且不超过 64 字符")
+        limit = max(1, min(limit, 500))
+        return task_flow_waterfall(task_id, limit=limit)
+
+    @router.get("/api/runtime/task-flow-list")
+    async def runtime_task_flow_list(limit: int = 20, stall_minutes: float = 30.0):
+        """P3: 任务流总览 — 最近任务按阶段事件聚合 (末活动时间倒序)。
+
+        Args:
+            limit: 最多返回任务数 (1~100)
+            stall_minutes: 停滞判定阈值 (分钟, 0~1440); ≤0 禁用停滞检测 (iter-40)
+
+        返回: [{task_id, stage_count, last_stage/last_label, total_ms, done, idle_ms, stalled}, ...]
+        """
+        from .runtime_trace import task_flow_overview
+        limit = max(1, min(limit, 100))
+        stall_minutes = max(0.0, min(stall_minutes, 1440))
+        return {"tasks": task_flow_overview(limit=limit, stall_minutes=stall_minutes),
+                "stall_minutes": stall_minutes}
+
+    @router.get("/api/runtime/task-stall-alerts")
+    async def runtime_task_stall_alerts():
+        """iter-41: 任务停滞主动告警 — 当前活跃告警 + 守护状态。
+
+        返回: {alerts: [{task_id, level, last_stage, last_label, idle_min, message}],
+               watching, interval, stall_minutes}
+        """
+        from .runtime_trace import active_stall_alerts, stall_watcher_status
+        status = stall_watcher_status()
+        return {"alerts": active_stall_alerts(), **status}
+
+    @router.post("/api/runtime/task-stall-alerts/check")
+    async def runtime_task_stall_check():
+        """iter-41: 手动触发一轮停滞检测 (返回新推送的告警)。"""
+        from .runtime_trace import check_stall_alerts
+        return {"pushed": check_stall_alerts()}
+
+    @router.post("/api/runtime/logs/prune")
+    async def runtime_logs_prune(days: float = 30.0):
+        """iter-54: 手动触发日志容量修剪 (补强#2, 运维/排查用)。
+
+        days: 保留天数 (1~365), 仅删超过保留期的历史行;
+        resource_usage_log 未上报行保留等离线补报; 修剪后执行 VACUUM。
+        返回各表删除行数统计与 vacuum 结果。
+        """
+        days = max(1.0, min(days, 365.0))
+        stats = (await run_in_threadpool(db.prune_logs, retention_days=days))
+        vacuum_ok = True
+        try:
+            (await run_in_threadpool(db.vacuum))
+        except Exception as e:  # VACUUM 失败不阻断修剪结果返回
+            vacuum_ok = False
+            logger.warning("[LogPrune] 手动 VACUUM 失败: %s", e)
+        return {"pruned": stats, "vacuum": vacuum_ok}
+
+    return router

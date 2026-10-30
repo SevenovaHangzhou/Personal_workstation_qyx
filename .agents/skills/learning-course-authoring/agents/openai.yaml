@@ -1,0 +1,4 @@
+interface:
+  display_name: "知行课程与学习知识库"
+  short_description: "围绕学习对象建立较全面的可追溯知识库，并组织由浅入深的学习路径和完整课程"
+  default_prompt: "使用 $learning-course-authoring，围绕学习对象检索可靠资料、建立知识库，再按先修关系形成由浅入深的学习路径、完整课程与练习。"

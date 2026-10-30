@@ -1,0 +1,120 @@
+# 模型资源管理配置 (Model Resources)
+# 复制为 resources.yaml 并填写你的实际资源池, 即可启用预算跟踪
+# resources.yaml 已在 .gitignore 中排除, 请勿提交到版本库
+#
+# 核心概念: 资源池 = 一个可计量的预算来源, 三种计划类型:
+#   payg        按量付费:  quota 为预算金额 (默认 USD), 消耗按 model_pool.yaml 价格实时折算
+#   token_plan  token 包:  quota 为 token 数, 一次性额度 (可带 expire_at 有效期)
+#   coding_plan 编程订阅:  quota 为每周期包含 token 数, 以 renew_at 为锚点周期重置
+#
+# 模型与资源池的关联规则:
+#   - models 列表显式列出关联的模型 id (推荐, 精确控制)
+#   - models 留空 → 该 provider 下所有模型自动关联 (按 model_pool.yaml 的 provider 匹配)
+# 未关联任何资源池的模型: 默认放行 (宽松), 开启 strict: true 后禁用
+#
+# ── 余额自动探测 (R2, 可选) ──────────────────────────────────────
+# 提供 API Key 两种方式 (二选一, 直填优先):
+#   - 资源池内填 api_key: sk-xxx (仅存本机, 文件已 gitignore) — 推荐,
+#     或在 Web 仪表盘「⚙️ 配置资源」向导中填写并一键测试
+#   - 填 api_key_env: DEEPSEEK_API_KEY 并设置同名环境变量
+# 然后运行 `python main.py resources --probe` 或 Web 仪表盘「探测余额」
+# 自动调用服务商余额 API:
+#   ✅ siliconflow  GET /v1/user/info        (CNY, 国际版 api.siliconflow.com)
+#   ✅ deepseek     GET /user/balance        (total_balance + currency)
+#   ✅ moonshot     GET /v1/users/me/balance (Kimi, 宽容解析)
+#   ⚠️ zhipu        GET /api/monitor/usage/quota/limit (实验性)
+#   ❌ openai / anthropic / ark / aliyun / google: 无普通 Key 余额接口, 控制台查看
+# 探测到余额为 0 的资源池自动标记 exhausted (模型从路由剔除)
+#
+# ── 跨主机用量上报 (R3, 多主机场景) ─────────────────────────────
+# Worker 主机的 LLM 用量自动汇总到 Secretary 统一计量:
+#   - 独立 Worker 进程 (python main.py worker): 自动发现 Secretary, 免配置
+#   - 内嵌 PM / Station 充当 Worker: 收到任务时自动注入上报目标, 免配置
+#   - 静态配置 (可选): 填写 secretary_url, 后台线程按 report_interval
+#     周期性批量上报; 上报失败自动重试 (离线容错), usage_id 幂等去重
+# secretary_url: http://192.168.1.10:18080   # Secretary 站点地址 (Worker 主机填)
+# report_interval: 60                         # 上报周期秒数 (默认 60)
+
+# strict: true   # 取消注释后, 未关联资源池的模型将从路由中剔除
+
+# ── 定价覆盖 (可选) ──────────────────────────────────────────────
+# model_pool.yaml 已收录模型的单价自动生效, 无需重复填写。
+# 仅当你的模型不在 model_pool.yaml 中时才需要在此补充 (单位: USD / 1K tokens)。
+# 主流服务商按量参考价 (2026, 单位 USD/M tokens, 输入/输出, 以官方为准):
+#   OpenAI    gpt-4o: 2.5/10,  gpt-4o-mini: 0.15/0.6, gpt-4.1: 2/8
+#   Anthropic claude-sonnet-4: 3/15, claude-opus-4: 15/75, claude-haiku-4.5: 1/5
+#   DeepSeek  deepseek-chat: 0.27/1.1 (cache miss/out), deepseek-reasoner: 0.55/2.19
+#   Google    gemini-2.5-pro: 1.25/10, gemini-2.5-flash: 0.3/2.5
+#   月之暗面  kimi-k2: 0.6/2.5, 智谱 glm-4.6: 0.6/2.6, 通义 qwen-max: 2.4/9.6
+pricing:
+  # gemini-2.5-pro:
+  #   input_per_1k: 0.00125
+  #   output_per_1k: 0.01
+
+# ── 轮换量化调度 (R5-2, 默认启用) ─────────────────────────
+# 同一模型多池候选时按量化价值公式排序 (越大越优先消耗):
+#   base      订阅池基线 10 (不用即沉没) / 按量池基线 5 (现金保留)
+#   sunk      沉没成本压力 = 剩余额度比例 × 窗口紧迫度 × weights.sunk
+#   time      时段折扣窗口 × weights.time (按量空闲半价 / 百炼夜间五折模型)
+#   deadline  临期加压 (expire_at 14 天内线性)
+#   watermark 高水位收尾 = 使用率 × weights.watermark
+# 合规红线: 订阅套餐 (token_plan/coding_plan) 禁止非交互式批量调用
+# (供应商条款), 批量任务执行前 set_usage_mode_global("batch"),
+# 结束后恢复; 仅当 batch_block_subscription: true 才从候选剔除订阅池
+# (需确保有 payg 池兜底, 否则无可用模型)。
+# rotation:
+#   quant: true                # false → 回退 R5 首版纯规则
+#   batch_block_subscription: false
+#   weights: {sunk: 4.0, time: 1.5, watermark: 3.0}
+#   payg_offpeak: [[0,9],[12,14],[18,24]]   # DeepSeek 空闲时段 (北京时间)
+#   night_discount:
+#     hours: [22, 8]           # 跨零点区间
+#     models: [qwen3.8-max, deepseek-v4-pro-0813]
+#     providers: [aliyun-tokenplan]
+
+# ── 资源池定义 ───────────────────────────────────────────────────
+resources:
+  # 示例 1: 按量付费预算池 (OpenAI, 月度预算 $10)
+  # - id: openai-payg
+  #   provider: openai
+  #   plan_type: payg
+  #   quota: 10.0
+  #   unit: usd
+  #   billing_period: monthly          # 每月 1 号重置
+  #   api_key_env: OPENAI_API_KEY
+  #   models: [gpt-4o, gpt-4o-mini]
+  #   alert_threshold: 0.8             # 使用率达 80% 告警
+  #   note: "日常开发预算"
+
+  # 示例 2: token 包 (一次性额度, 带有效期)
+  # - id: deepseek-token-pack
+  #   provider: deepseek
+  #   plan_type: token_plan
+  #   quota: 100000000                 # 1 亿 token
+  #   billing_period: one_time
+  #   expire_at: 1815868800            # unix 时间戳 (2027-07-01), 0 = 不过期
+  #   api_key: sk-xxx                  # 直填 (推荐, 支持一键测余额) 或用下面的 env 方式
+  #   api_key_env: DEEPSEEK_API_KEY
+  #   models: [deepseek-chat, deepseek-coder, deepseek-reasoner]
+
+  # 示例 3: 编程订阅 (每 30 天重置, renew_at 为续费锚点)
+  # - id: ark-coding-plan
+  #   provider: volcengine-ark
+  #   plan_type: coding_plan
+  #   quota: 50000000                  # 每周期 5 千万 token
+  #   billing_period: renew
+  #   renew_at: 1815868800             # 上次续费日 (unix 时间戳)
+  #   period_days: 30                  # 重置周期
+  #   api_key_env: ARK_API_KEY
+  #   models: [ark-code-latest, doubao-seed-2.1-turbo]
+  #   alert_threshold: 0.9
+
+  # 示例 4: token plan 订阅 (阿里百炼 Credits, 按月重置)
+  # - id: aliyun-tokenplan
+  #   provider: aliyun-tokenplan
+  #   plan_type: token_plan
+  #   quota: 30000000
+  #   billing_period: monthly
+  #   api_key_env: ALIYUN_TOKENPLAN_API_KEY
+  #   models: [qwen3.7-max, qwen3.6-flash, deepseek-v4-pro, glm-5.2]
+  #   note: "百炼个人版 Lite"

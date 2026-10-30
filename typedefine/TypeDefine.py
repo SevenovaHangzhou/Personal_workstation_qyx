@@ -1,0 +1,6 @@
+APP_VERSION = "0.6.2"
+CONTEXT_GROUP = "momo"
+CTX_DATA_PATH = "data_path"
+CTX_REVISION = "task_revision"
+CTX_FOCUS = "focus_snapshot"
+FOCUS_LOOP = "momo.focus"

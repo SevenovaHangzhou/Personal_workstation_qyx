@@ -1,0 +1,345 @@
+"""
+工具注册表 — 插件化工具管理系统
+
+参考 Anthropic MCP 的 Tool 概念,提供:
+1. 内置工具 (file_read, file_write, shell_exec, http_request)
+2. 配置文件加载的插件工具 (YAML)
+3. 运行时动态注册
+4. 工具执行调度
+
+每个工具包含:
+- name: 唯一标识
+- description: 自然语言描述
+- input_schema: JSON Schema 描述输入参数
+- handler: 可调用的执行函数
+"""
+import importlib
+import os
+import subprocess
+from pathlib import Path
+from typing import Any, Callable, Optional
+
+import yaml
+
+from .protocol import ToolDef
+from .logger import get_logger
+
+logger = get_logger("tool_registry")
+
+TOOL_TIMEOUT_DEFAULT = 30
+TOOL_TIMEOUT_MAX = 120
+GIT_SAFE_DIRECTORY_MESSAGES = (
+    "detected dubious ownership in repository",
+    "unsafe repository",
+    "safe.directory",
+)
+
+
+def normalize_tool_timeout(value: Any = TOOL_TIMEOUT_DEFAULT) -> int:
+    """Normalize a tool timeout to the 1-120 second safety range."""
+    try:
+        timeout = int(value)
+    except (TypeError, ValueError):
+        timeout = TOOL_TIMEOUT_DEFAULT
+    return max(1, min(timeout, TOOL_TIMEOUT_MAX))
+
+
+def mark_git_safe_directory_denied(result: dict) -> dict:
+    """Mark Git safe.directory rejection as a non-retryable read-only boundary."""
+    output = f"{result.get('stdout', '')}\n{result.get('stderr', '')}".lower()
+    if not any(message in output for message in GIT_SAFE_DIRECTORY_MESSAGES):
+        return result
+    result["git_safe_directory_denied"] = True
+    result["remediation"] = (
+        "Git rejected this repository for safe.directory reasons. Do not run "
+        "git config or retry the same Git command; use file_read and dir_list "
+        "for read-only analysis."
+    )
+    return result
+
+
+# ── 工具执行处理器 ──────────────────────────────────────────────
+
+def _tool_file_read(params: dict) -> dict:
+    """读取文件内容。"""
+    path = params.get("path", "")
+    encoding = params.get("encoding", "utf-8")
+    with open(path, "r", encoding=encoding) as f:
+        return {"content": f.read(), "path": path}
+
+
+def _tool_file_write(params: dict) -> dict:
+    """写入文件内容。"""
+    path = params.get("path", "")
+    content = params.get("content", "")
+    encoding = params.get("encoding", "utf-8")
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding=encoding) as f:
+        f.write(content)
+    return {"path": path, "written": len(content)}
+
+
+def _tool_shell_exec(params: dict) -> dict:
+    """执行 Shell 命令。"""
+    command = params.get("command", "")
+    timeout = normalize_tool_timeout(params.get("timeout", TOOL_TIMEOUT_DEFAULT))
+    cwd = params.get("cwd")
+    try:
+        result = subprocess.run(
+            command, shell=True, capture_output=True, text=True,
+            timeout=timeout, cwd=cwd,
+        )
+        return mark_git_safe_directory_denied({
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "returncode": result.returncode,
+        })
+    except subprocess.TimeoutExpired:
+        return {
+            "stdout": "",
+            "stderr": f"命令超时 ({timeout}s)",
+            "returncode": -1,
+            "timed_out": True,
+        }
+
+
+def _tool_http_request(params: dict) -> dict:
+    """发起 HTTP 请求。"""
+    import requests as req
+    url = params.get("url", "")
+    method = params.get("method", "GET").upper()
+    headers = params.get("headers", {})
+    body = params.get("body", "")
+    timeout = normalize_tool_timeout(params.get("timeout", TOOL_TIMEOUT_DEFAULT))
+
+    try:
+        resp = req.request(
+            method, url, headers=headers, data=body if body else None,
+            timeout=timeout,
+        )
+    except req.Timeout:
+        return {
+            "status_code": 0,
+            "headers": {},
+            "body": "",
+            "error": f"HTTP 请求超时 ({timeout}s)",
+            "timed_out": True,
+        }
+    return {
+        "status_code": resp.status_code,
+        "headers": dict(resp.headers),
+        "body": resp.text[:10000],  # 限制返回大小
+    }
+
+
+def _tool_dir_list(params: dict) -> dict:
+    """列出目录内容。"""
+    path = params.get("path", ".")
+    pattern = params.get("pattern", "*")
+    entries = []
+    for entry in sorted(Path(path).glob(pattern)):
+        entries.append({
+            "name": entry.name,
+            "path": str(entry),
+            "is_dir": entry.is_dir(),
+            "size": entry.stat().st_size if entry.is_file() else 0,
+        })
+    return {"entries": entries, "path": path}
+
+
+def _tool_python_eval(params: dict) -> dict:
+    """执行 Python 表达式 (受限沙箱)。"""
+    code = params.get("code", "")
+    try:
+        local_ns = {}
+        exec(code, {"__builtins__": {}}, local_ns)
+        return {"result": str(local_ns), "success": True}
+    except Exception as e:
+        return {"result": str(e), "success": False}
+
+
+def _tool_run_code(params: dict) -> dict:
+    """F2.2: 在安全沙箱中执行代码 (独立进程 + 超时保护)。"""
+    from .sandbox import sandbox
+    code = params.get("code", "")
+    language = params.get("language", "python")
+    timeout = normalize_tool_timeout(params.get("timeout", TOOL_TIMEOUT_DEFAULT))
+    packages = params.get("packages", [])
+
+    if packages and language == "python":
+        result = sandbox.execute_with_venv(code, packages=packages, timeout=timeout)
+    else:
+        result = sandbox.execute(code, language=language, timeout=timeout)
+
+    return result.to_dict()
+
+
+# ── 内置工具定义 ────────────────────────────────────────────────
+
+BUILTIN_TOOLS = {
+    "file_read": {
+        "tool": ToolDef(
+            name="file_read",
+            description="读取指定路径的文件内容",
+            mcp_compatible=True,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "文件路径"},
+                    "encoding": {"type": "string", "description": "文件编码,默认 utf-8"},
+                },
+                "required": ["path"],
+            },
+        ),
+        "handler": _tool_file_read,
+    },
+    "file_write": {
+        "tool": ToolDef(
+            name="file_write",
+            description="将内容写入指定文件",
+            mcp_compatible=True,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "文件路径"},
+                    "content": {"type": "string", "description": "写入内容"},
+                    "encoding": {"type": "string", "description": "文件编码,默认 utf-8"},
+                },
+                "required": ["path", "content"],
+            },
+        ),
+        "handler": _tool_file_write,
+    },
+    "shell_exec": {
+        "tool": ToolDef(
+            name="shell_exec",
+            description="执行 Shell 命令并返回输出",
+            mcp_compatible=True,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string", "description": "Shell 命令"},
+                    "timeout": {"type": "integer", "description": "超时秒数,默认 30"},
+                    "cwd": {"type": "string", "description": "工作目录"},
+                },
+                "required": ["command"],
+            },
+        ),
+        "handler": _tool_shell_exec,
+    },
+    "http_request": {
+        "tool": ToolDef(
+            name="http_request",
+            description="发起 HTTP 请求并返回响应",
+            mcp_compatible=True,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "请求 URL"},
+                    "method": {"type": "string", "description": "HTTP 方法,默认 GET"},
+                    "headers": {"type": "object", "description": "请求头"},
+                    "body": {"type": "string", "description": "请求体"},
+                    "timeout": {"type": "integer", "description": "超时秒数,默认 30"},
+                },
+                "required": ["url"],
+            },
+        ),
+        "handler": _tool_http_request,
+    },
+    "dir_list": {
+        "tool": ToolDef(
+            name="dir_list",
+            description="列出目录内容",
+            mcp_compatible=True,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "目录路径,默认当前目录"},
+                    "pattern": {"type": "string", "description": "glob 匹配模式,默认 *"},
+                },
+            },
+        ),
+        "handler": _tool_dir_list,
+    },
+    "python_eval": {
+        "tool": ToolDef(
+            name="python_eval",
+            description="在受限沙箱中执行 Python 代码 (无内置函数)",
+            mcp_compatible=True,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string", "description": "Python 代码"},
+                },
+                "required": ["code"],
+            },
+        ),
+        "handler": _tool_python_eval,
+    },
+    "run_code": {
+        "tool": ToolDef(
+            name="run_code",
+            description="在安全沙箱中执行代码 (独立进程+超时保护, 支持python/javascript/bash/powershell)",
+            mcp_compatible=True,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string", "description": "要执行的代码"},
+                    "language": {"type": "string", "enum": ["python", "javascript", "bash", "powershell"], "description": "编程语言"},
+                    "timeout": {"type": "integer", "description": "超时秒数 (1-120, 默认30)"},
+                    "packages": {"type": "array", "items": {"type": "string"}, "description": "Python依赖包 (可选, 将创建venv)"},
+                },
+                "required": ["code"],
+            },
+        ),
+        "handler": _tool_run_code,
+    },
+}
+
+
+from typing import Any
+
+class ToolRegistry:
+    """工具注册表 — 管理工具的注册、查询和执行。
+
+    支持三种注册方式:
+    1. 内置工具 (BUILTIN_TOOLS)
+    2. 配置文件加载 (YAML 插件定义)
+    3. 运行时动态注册 (register_tool)
+    """
+
+    def __init__(self):
+        self._tools: dict[str, dict] = {}
+        # 注册内置工具
+        for name, entry in BUILTIN_TOOLS.items():
+            self._tools[name] = entry.copy()
+
+    def register_tool(self, tool: ToolDef, handler: Callable) -> Any:
+        return call_component(self, ToolCatalogService, 'register_tool', tool=tool, handler=handler)
+
+    def unregister_tool(self, name: str) -> Any:
+        return call_component(self, ToolCatalogService, 'unregister_tool', name=name)
+
+    def list_tools(self) -> list[dict]:
+        return call_component(self, ToolCatalogService, 'list_tools')
+
+    def list_tool_defs(self) -> list[ToolDef]:
+        return call_component(self, ToolCatalogService, 'list_tool_defs')
+
+    def get_tool(self, name: str) -> Optional[dict]:
+        return call_component(self, ToolCatalogService, 'get_tool', name=name)
+
+    def call_tool(self, name: str, params: dict) -> dict:
+        return call_component(self, ToolExecutionService, 'call_tool', name=name, params=params)
+
+    def load_plugins(self, config_path: str) -> Any:
+        return call_component(self, ToolCatalogService, 'load_plugins', config_path=config_path)
+
+    def tool_count(self) -> int:
+        return call_component(self, ToolCatalogService, 'tool_count')
+
+
+from typing import Any
+from .component_service import call_component
+from .tool_catalog_service import ToolCatalogService
+from .tool_execution_service import ToolExecutionService

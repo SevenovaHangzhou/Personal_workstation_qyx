@@ -1,0 +1,35 @@
+# Local runtimes, caches and development output
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.logs/
+*.log
+work/
+build/
+dist/
+*.egg-info/
+
+# Machine-specific migration records and application data
+LOCAL_MIGRATION.json
+momo.lock
+tasks.json
+tasks.json.*
+daily/
+learning/
+station/
+*.sqlite*
+*.db
+
+# Credentials are stored outside the repository
+.env
+.env.*
+!.env.example
+auth.json
+credentials.json
+*.pem
+*.key
+.idea/
+.vscode/
