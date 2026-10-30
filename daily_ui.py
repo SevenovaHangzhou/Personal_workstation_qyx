@@ -138,7 +138,9 @@ class DailyDialog(QDialog):
         if not item: self.preview.clear(); return
         path=Path(item.data(Qt.UserRole)['path'])
         try: self.preview.setPlainText(path.read_text(encoding='utf-8'))
-        except OSError: self.preview.setPlainText('本地报告投影暂时不可读，数据库中的记录仍保留。')
+        except OSError:
+            try:self.preview.setPlainText(self.client.report_text(item.data(Qt.UserRole)['day']))
+            except (OSError,ValueError):self.preview.setPlainText('本地报告投影暂时不可读，数据库中的记录仍保留。')
     def show_pending(self, *unused):
         item=self.pending.currentItem(); self.locate.setEnabled(bool(item))
         if not item:self.pending_detail.setText('目前没有待创建 issue 或待调整父级的工作任务。');return

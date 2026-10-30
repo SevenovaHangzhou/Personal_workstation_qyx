@@ -3,8 +3,9 @@ import threading
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+import re
 from framework import api
-from services.base import MomoService, ok, require
+from services.base import MomoService, ok, require, request_data
 from daily_store import DailyStore
 from daily_history import ZONE, latest_due
 from daily_engine import DailyEngine
@@ -15,6 +16,8 @@ class DailyService(MomoService):
         super().__init__(server)
         self.set_name('/DailyService')
         self.store = DailyStore(folder)
+        from storage_retention import Retention
+        self.retention=Retention(self.store.folder.parent)
         self.engine = DailyEngine(self.store, tasks, linear.writer, station)
         self.engine.progress = self.progress
         self.linear = linear
@@ -28,10 +31,13 @@ class DailyService(MomoService):
             config = {'enabled':True, 'activated':False, 'target':{}, 'next_day':datetime.now(ZONE).date().isoformat()}
             self.store.put('config', config)
         self.install('/snapshot', self.snapshot, 'None', '查看自动日报设置、到期日期和同步结果')
+        self.install('/report_text',self.report_text,'dict','从保留的日报账本读取正文，兼容已清理的文件投影')
         self.install('/configure', self.configure, 'dict', '设置日报启停与用户已选择的 Linear 归属')
         self.install('/retry', self.retry, 'None', '补跑已到期日报及失败同步，不提前发布当前周期')
         # This handler performs read-only I/O on the caller's worker thread.
         self.install_func('/choices', self.choices, 'dict', '分页读取可选团队和项目；UI 在后台线程调用')
+        self.install_func('/retention_preview',self.retention_preview,'dict','预览30天前的已结束原始输出与已完成日报留存')
+        self.install_func('/retention_apply',self.retention_apply,'dict','一次性确认清单，重新核对后移入系统回收站')
         self.alive = True
         return 0
 
@@ -72,6 +78,12 @@ class DailyService(MomoService):
         self.wake.set()
         return self.snapshot(None)
 
+    def report_text(self,pkg):
+        require(isinstance(pkg,dict) and set(pkg)=={'day'} and isinstance(pkg['day'],str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}',pkg['day']),'无效日报日期')
+        datetime.fromisoformat(pkg['day'])
+        report=self.store.report(pkg['day']);require(report is not None,'日报不存在')
+        return ok(report['content']['markdown']+('\n\n待处理：\n'+'\n'.join('- '+error for error in report['errors']) if report['errors'] else ''))
+
     def retry(self, pkg):
         require(pkg is None, 'expected None')
         self.manual = True; self.wake.set()
@@ -86,6 +98,33 @@ class DailyService(MomoService):
             return ok(self.linear.writer().choices(pkg.get('team_id','')))
         except Exception as exc:
             return api.YomkResponse(api.ResStatus.eNo, str(exc))
+
+    def retention_request(self,pkg,apply=False):
+        try:
+            require(isinstance(pkg,dict) and set(pkg)==({'id','cancel'} if apply else {'cancel'}),'无效留存请求')
+            require(isinstance(pkg['cancel'],threading.Event),'无效取消标志')
+            with self.lock:require(self.alive,'日报服务已停止')
+            if apply:
+                require(isinstance(pkg['id'],str),'无效确认清单')
+                result=self.retention.apply(pkg['id'],pkg['cancel'].is_set)
+                self.store.put('last_retention_result',result)
+                return ok(result)
+            candidates=request_data('/LearningService/retention_artifacts')
+            done={row['day'] for row in self.store.reports() if row['state']=='done'}
+            candidates.extend('daily/'+day+'.md' for day in done)
+            git=self.store.folder/'git'
+            if git.is_dir() and not git.is_symlink():
+                candidates.extend('daily/git/'+path.name for path in git.iterdir()
+                                  if re.fullmatch(r'\d{4}-\d{2}-\d{2}-[A-Za-z0-9-]+',path.name) and path.name[:10] in done)
+            compression=self.store.folder/'compression'
+            if compression.is_dir() and not compression.is_symlink():
+                candidates.extend('daily/compression/'+path.name for path in compression.iterdir()
+                                  if re.fullmatch('[0-9a-f]{64}',path.name) and self.store.cached_summary(path.name) is not None)
+            return ok(self.retention.preview(candidates,pkg['cancel'].is_set))
+        except Exception as exc:return api.YomkResponse(api.ResStatus.eNo,str(exc))
+
+    def retention_preview(self,pkg):return self.retention_request(pkg)
+    def retention_apply(self,pkg):return self.retention_request(pkg,True)
 
     def _loop(self):
         retry_at = 0

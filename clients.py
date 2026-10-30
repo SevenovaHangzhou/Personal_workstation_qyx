@@ -84,6 +84,9 @@ class FocusClient:
 
 
 class DailyClient:
+    def report_text(self,day):return call('/DailyService/report_text',{'day':day})
+    def retention_preview(self,cancel):return call('/DailyService/retention_preview',{'cancel':cancel})
+    def retention_apply(self,identifier,cancel):return call('/DailyService/retention_apply',{'id':identifier,'cancel':cancel})
     def snapshot(self): return call("/DailyService/snapshot")
     def configure(self, **settings): return call("/DailyService/configure", settings)
     def retry(self): return call("/DailyService/retry")

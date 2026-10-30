@@ -66,7 +66,7 @@ class LearningService(MomoService):
 
     def init(self):
         for endpoint in ('revision','snapshot','catalog','bind','start','cancel','course','answer',
-                         'tutor_snapshot','tutor_ask','tutor_cancel','study_state','save_study'):
+                         'tutor_snapshot','tutor_ask','tutor_cancel','study_state','save_study','retention_artifacts'):
             self.install('/'+endpoint,getattr(self,endpoint),'dict','学习课程、后台生成与作答：'+endpoint)
         self.alive = True
         return 0
@@ -246,6 +246,18 @@ class LearningService(MomoService):
             if not lesson: return ok({})
             if lesson['revision']!=value.get('lesson_revision'): value={**value,'scroll_ratio':0}
         return ok(value)
+
+    def retention_artifacts(self,pkg):
+        require(pkg is None,'expected None')
+        terminal={'review','failed','cancelled','interrupted'}
+        paths=['learning/generations/'+job['id'] for job in self.state['jobs'].values()
+               if job['status'] in terminal and job['id'] not in self.workers
+               and (job['status']!='review' or job.get('course_id') in self.courses)]
+        with self.tutor.lock:
+            paths.extend('learning/tutor/runs/'+turn['id'] for conv in self.tutor.state['conversations'].values()
+                         for turn in conv['turns'] if turn['status'] in {'done','failed','cancelled','interrupted'}
+                         and turn['id'] not in self.tutor.workers)
+        return ok(paths)
 
     def save_study(self, pkg):
         require(isinstance(pkg,dict) and set(pkg)=={'task_id','course_id','lesson_id','lesson_revision','scroll_ratio','question'},'无效续读记录')
