@@ -4,7 +4,12 @@ from pathlib import Path
 from framework import api
 from boot.MomoBoot import MomoBoot
 from clients import TaskClient, FocusClient, LinearClient, CodexClient, DailyClient, LearningClient
+from clients import UpdateClient
 from typedefine.TypeDefine import CONTEXT_GROUP, FOCUS_LOOP
+
+
+class DataSpaceInUse(RuntimeError):
+    pass
 
 
 class MomoRuntime:
@@ -20,10 +25,12 @@ class MomoRuntime:
         self.codex = CodexClient()
         self.daily = DailyClient()
         self.learning = LearningClient()
+        self.updates = UpdateClient()
         self.started = False
         self.station = None
         self.daily_service = None
         self.learning_service = None
+        self.update_service = None
         self._data_lock = None
 
     def start(self):
@@ -42,7 +49,7 @@ class MomoRuntime:
             try:
                 fcntl.flock(self._data_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except OSError:
-                raise RuntimeError("此 Momo 数据空间已在运行，请打开已有窗口") from None
+                raise DataSpaceInUse("此 Momo 数据空间已在运行，请打开已有窗口") from None
             if api.boot(self.boot) != 0:
                 raise RuntimeError("Momo Boot failed")
             from station_backend import EmbeddedStation
@@ -59,15 +66,23 @@ class MomoRuntime:
             if api.add_service(self.learning_service, "/LearningService") != 0:
                 raise RuntimeError("学习服务启动失败")
             self.boot.registered.append("/LearningService")
+            from services.UpdateService import UpdateService
+            self.update_service = UpdateService(api.server(), self.path.parent/'updates', self.boot.auto_tick)
+            if api.add_service(self.update_service, '/UpdateService') != 0:
+                raise RuntimeError('更新服务启动失败')
+            self.boot.registered.append('/UpdateService')
+            self.update_service.start_clock()
         except Exception:
-            self.close()
+            self.close(apply_update=False)
             raise
         return self
 
-    def close(self):
+    def close(self, apply_update=True):
         if not self.started:
             return
         errors = []
+        if self.update_service:
+            self.update_service.stop()
         if self.learning_service:
             self.learning_service.stop()
         if self.daily_service:
@@ -96,6 +111,9 @@ class MomoRuntime:
         for key in reversed(self.boot.context_keys):
             api.context_destroy(key, CONTEXT_GROUP)
         self.boot.context_keys.clear()
+        if apply_update and self.update_service and not errors:
+            try:self.update_service.activate()
+            except (OSError,ValueError) as exc:errors.append('更新尚未切换：'+str(exc))
         if self._data_lock:
             self._data_lock.close()
             self._data_lock = None

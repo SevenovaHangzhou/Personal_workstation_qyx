@@ -87,6 +87,8 @@ def main():
                  str(ROOT/'packaging/orbit.spec')], cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
     bundle = work/'dist/orbit'
     shutil.copy2(ROOT/'packaging/launch.sh', bundle/'orbit'); (bundle/'orbit').chmod(0o755)
+    shutil.copy2(ROOT/'packaging/ota-launch.sh', bundle/'ota-launch.sh')
+    (bundle/'VERSION').write_text(release_version+'\n')
     shutil.copy2(ROOT/'assets/orbit.svg', bundle/'orbit.svg')
     versions = add_notices(bundle)
     (bundle/'README.txt').write_text(

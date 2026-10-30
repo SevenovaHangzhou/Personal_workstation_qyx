@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ORBIT_APP_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$ORBIT_APP_DIR/ota-launch.sh"
+orbit_ota_launch "$(cat -- "$ORBIT_APP_DIR/VERSION")" "$@"
 if [[ "${1:-}" == --version || "${1:-}" == --help || "${1:-}" == --self-test ]]; then
     exec "$ORBIT_APP_DIR/orbit-bin" "$@"
 fi

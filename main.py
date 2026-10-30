@@ -18,7 +18,7 @@ configure_qt_plugins()
 from model import CATEGORIES, STATUSES, make_task, progress, parse_binding, has_work_issue, has_linear_context
 from art import icon, OrbitMark
 from framework import api
-from runtime import MomoRuntime
+from runtime import MomoRuntime, DataSpaceInUse
 from typedefine.TypeDefine import APP_VERSION
 
 from theme import APP_NAME, APP_WORDMARK, APP_DISPLAY_NAME, TAGLINE, CATEGORY_COLORS, STYLE
@@ -229,6 +229,7 @@ class Momo(QMainWindow):
         menu.addAction("打开"+APP_NAME,self.restore_window)
         menu.addAction("需要我处理",self.open_attention)
         menu.addAction("日报与同步",self.open_daily)
+        menu.addAction('应用更新',self.open_updates)
         menu.addSeparator()
         menu.addAction("停止执行并退出",self.exit_application)
         self.tray.setContextMenu(menu)
@@ -257,7 +258,7 @@ class Momo(QMainWindow):
         self.day_progress=QProgressBar(); self.day_progress.setTextVisible(False); q.addWidget(self.day_progress); col.addWidget(quiet)
         col.addSpacing(8); col.addWidget(button("偏好设置","nav",glyph="settings",callback=self.settings))
         col.addWidget(button("停止执行并退出","linkButton",callback=self.exit_application))
-        foot=box(horizontal=True); foot.addWidget(label("●  本地保存","eyebrow")); foot.addStretch(); foot.addWidget(label("v"+APP_VERSION,"eyebrow")); col.addLayout(foot)
+        foot=box(horizontal=True); foot.addWidget(label("●  本地保存","eyebrow")); foot.addStretch(); foot.addWidget(button('v'+APP_VERSION,'linkButton',callback=self.open_updates)); col.addLayout(foot)
 
     def add_nav(self,layout,key,text,glyph):
         b=button(text,"nav",glyph=glyph,callback=lambda checked=False,k=key:self.navigate(k)); b.setCheckable(True); layout.addWidget(b); self.nav_buttons[key]=b
@@ -913,6 +914,7 @@ class Momo(QMainWindow):
         duration.setCurrentIndex([15,25,45,60].index(self.focus_duration//60)); layout.addWidget(duration)
         layout.addWidget(label("Linear：从「拉取 My Issues」读取并导入工作任务。\n再次导入会更新远端信息，保留本地进度与笔记。\nCodex：可新建聊天，或选择已有聊天进行绑定。","muted",True))
         layout.addWidget(label("服务框架：YomkServerPy "+api.version(),"muted"))
+        layout.addWidget(button('应用更新 · 自动检查新版本','outline',callback=self.open_updates))
         location=QLineEdit(str(self.tasks.path)); location.setReadOnly(True); layout.addWidget(label("本地数据文件","section")); layout.addWidget(location)
         layout.addWidget(label("快捷键：Ctrl N 新建 · Ctrl K 搜索\nCtrl Shift F 开始 / 暂停专注","muted",True))
         save=button("保存设置","primary",callback=dialog.accept); layout.addWidget(save)
@@ -920,6 +922,10 @@ class Momo(QMainWindow):
             new_duration=duration.currentData()
             if new_duration!=self.focus_duration and self.write(lambda:self.focus.set_duration(new_duration//60)):
                 self.refresh_timer()
+
+    def open_updates(self):
+        from update_ui import UpdateDialog
+        dialog=UpdateDialog(self,self.runtime.updates);dialog.exec_();dialog.deleteLater()
 
     def sample_info(self):
         dialog=QDialog(self); dialog.setWindowTitle("示例空间"); dialog.setMinimumWidth(400); layout=box(dialog,margins=(25,25,25,25),spacing=16)
@@ -1027,9 +1033,12 @@ def main():
             api.shutdown()
     directory=args.data_dir or Path(QStandardPaths.writableLocation(QStandardPaths.AppDataLocation))
     runtime=MomoRuntime(directory/"tasks.json")
+    apply_update=False
     try:
         runtime.start()
         window=Momo(runtime); window.show()
+        apply_update=True
+        QTimer.singleShot(0,runtime.update_service.mark_started)
         if args.screenshot:
             if args.screenshot_view=="board": window.change_mode("board")
             if args.screenshot_view=="mini": window.show_mini()
@@ -1041,9 +1050,10 @@ def main():
             QTimer.singleShot(450,capture)
         return app.exec_()
     except (ValueError,OSError,RuntimeError) as exc:
-        QMessageBox.critical(None,APP_NAME+" 启动失败",str(exc)); return 1
+        apply_update=False
+        QMessageBox.critical(None,APP_NAME+" 启动失败",str(exc)); return 75 if isinstance(exc,DataSpaceInUse) else 1
     finally:
-        try: runtime.close()
+        try: runtime.close(apply_update=apply_update)
         finally: api.shutdown()
 
 

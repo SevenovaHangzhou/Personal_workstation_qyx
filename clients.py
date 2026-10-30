@@ -62,6 +62,13 @@ class TaskClient:
     def resolve_repository(self, task_id, index): return call("/GitService/resolve", RepositoryIndex(task_id, index))
 
 
+class UpdateClient:
+    def snapshot(self): return call('/UpdateService/snapshot', {})
+    def check(self): return call('/UpdateService/check', {})
+    def configure(self, enabled): return call('/UpdateService/configure', {'enabled':enabled})
+    def cancel(self): return call('/UpdateService/cancel', {})
+
+
 class LinearClient:
     def configure(self, api_key, remember=False): return call("/LinearService/configure", LinearCredentials(api_key, remember))
     def forget(self): return call("/LinearService/forget")

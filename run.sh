@@ -3,6 +3,8 @@ set -euo pipefail
 MOMO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 MOMO_LOG_DIR="${MOMO_LOG_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/orbit}"
 MOMO_LOG_FILE="$MOMO_LOG_DIR/startup.log"
+source "$MOMO_ROOT/packaging/ota-launch.sh"
+orbit_ota_launch "$(sed -n 's/^APP_VERSION = "\([0-9][0-9.]*\)"$/\1/p' "$MOMO_ROOT/typedefine/TypeDefine.py")" "$@"
 
 momo_finish() {
     local momo_status=$?
