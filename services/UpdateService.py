@@ -79,7 +79,7 @@ class UpdateService(MomoService):
 
     def cancel_update(self,pkg):
         require(pkg=={},'expected empty dict');self.cancel.set()
-        if not (self.worker and self.worker.is_alive()) and self.state['ready']:
+        if self.state['ready'] and (self.state['status']=='ready' or not (self.worker and self.worker.is_alive())):
             old=copy.deepcopy(self.state)
             self.state.update(ready=None,status='cancelled',message='已取消待更新版本，退出时保留当前版本')
             try:self.persist()
@@ -113,6 +113,7 @@ class UpdateService(MomoService):
             ready=self.stager(self.folder,release,self.cancel,self.progress,self.source)
             cancelled(self.cancel)
             with self.lock:
+                cancelled(self.cancel)
                 previous=copy.deepcopy(self.state)
                 self.state.update(ready=ready,status='ready',message='更新 '+ready['version']+' 已就绪，完整退出后切换，下次启动生效')
                 try:self.persist()

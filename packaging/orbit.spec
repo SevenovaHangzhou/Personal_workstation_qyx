@@ -1,9 +1,15 @@
 # PyInstaller recipe. Paths are relative to the repository, never a user's home.
 from pathlib import Path
+import ssl
 
 root = Path(SPECPATH).parent
 data = [(str(root/'assets'), 'assets'),
         (str(root/'.agents/skills/learning-course-authoring'), '.agents/skills/learning-course-authoring')]
+# Some bundled Python runtimes load an adjacent public CA policy file when
+# creating SSLContext. Keep that runtime policy intact in the frozen app.
+tls_policy = Path(ssl.__file__).with_name('codex-rejected-cas.pem')
+if tls_policy.is_file():
+    data.append((str(tls_policy), '.'))
 for name, source in [('YomkServerPy', root/'vendor/yomkserverpy/LICENSE.txt'),
                      ('Work-Station', root/'vendor/work_station/LICENSE')]:
     data.append((str(source), 'licenses/'+name))

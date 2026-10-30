@@ -125,6 +125,11 @@ class OtaServiceTests(unittest.TestCase):
         self.assertIsNone(self.runtime.updates.snapshot()['ready'])
         self.runtime.close();self.assertFalse((self.service.folder/'current-version').exists())
 
+    def test_cancel_ready_while_worker_is_finishing_still_cancels_activation(self):
+        self.check()
+        with patch.object(self.service.worker,'is_alive',return_value=True):self.runtime.updates.cancel()
+        self.assertIsNone(self.runtime.updates.snapshot()['ready'])
+
     def test_equal_older_and_prerelease_do_not_download(self):
         for tag,preview in [('v0.9.1',False),('v0.9.0',False),('v0.10.0',True)]:
             self.release.update(tag_name=tag,prerelease=preview)

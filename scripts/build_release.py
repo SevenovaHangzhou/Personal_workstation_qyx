@@ -109,9 +109,10 @@ def main():
         probe_env['XDG_DATA_HOME'] = str(Path(temporary)/'data')
         probe_env['XDG_STATE_HOME'] = str(Path(temporary)/'state')
         for switch in ('--version', '--self-test'):
-            result = run([str(bundle/'orbit'), switch], cwd=temporary, env=probe_env,
-                         capture_output=True, text=True, timeout=60)
+            result = subprocess.run([str(bundle/'orbit'), switch], cwd=temporary, env=probe_env,
+                                    capture_output=True, text=True, timeout=60)
             (work/(switch[2:]+'.log')).write_text(result.stdout+result.stderr)
+            result.check_returncode()
             if switch == '--version' and release_version not in result.stdout:
                 raise RuntimeError('Frozen version check failed')
         run([str(bundle/'orbit-bin'), '--data-dir', str(Path(temporary)/'screenshot-data'),
