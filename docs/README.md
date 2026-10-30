@@ -1,5 +1,7 @@
 # 工程文档
 
+- [使用说明](USAGE.md)
+
 - [架构与服务](ARCHITECTURE.md)
 - [主题与交互](DESIGN.md)、[品牌](BRAND_THEME.md)
 - [任务规划](TASK_PLANNING.md)、[日报与 Git 留存](DAILY_PROGRESS_PLAN.md)
