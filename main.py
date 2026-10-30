@@ -677,13 +677,17 @@ class Momo(QMainWindow):
         for kind,name in [("codex","Codex 聊天"),("linear","Linear issue")]:
             if kind=="linear" and task["category"]!="work": continue
             linked=[b for b in task["bindings"] if b["kind"]==kind]
+            task_chat=kind=="codex" and any(not b.get("demo") for b in linked)
             card=QFrame(); card.setObjectName("binding"); layout=box(card,margins=(12,10,12,9),spacing=5)
-            top=box(horizontal=True,spacing=7); pic=QLabel(); pic.setPixmap(icon(kind,"#5f7488" if kind=="codex" else "#8676a5",17).pixmap(17,17)); top.addWidget(pic); top.addWidget(label(name)); top.addStretch()
+            top=box(horizontal=True,spacing=7); pic=QLabel(); pic.setPixmap(icon(kind,"#5f7488" if kind=="codex" else "#8676a5",17).pixmap(17,17)); top.addWidget(pic)
+            if task_chat: top.addWidget(button("打开任务 Codex","linkButton",callback=lambda checked=False:self.open_binding("codex")))
+            else: top.addWidget(label(name))
+            top.addStretch()
             if linked and linked[0].get("demo"): top.addWidget(label("示例","badge"))
             layout.addLayout(top)
             if linked:
                 layout.addWidget(label(linked[0]["label"]+(f"  +{len(linked)-1}" if len(linked)>1 else ""),"muted",True))
-                layout.addWidget(button("打开对话  ↗" if kind=="codex" else "打开 issue  ↗","linkButton",callback=lambda checked=False,k=kind:self.open_binding(k)))
+                if not task_chat: layout.addWidget(button("打开对话  ↗" if kind=="codex" else "打开 issue  ↗","linkButton",callback=lambda checked=False,k=kind:self.open_binding(k)))
             elif kind=="linear": layout.addWidget(button("＋  关联一个 issue","linkButton",callback=lambda checked=False:self.bind_task("linear")))
             if kind=="codex":
                 actions=box(horizontal=True,spacing=8)
