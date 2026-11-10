@@ -1,5 +1,6 @@
 """ORBIT visual identity; storage and service identifiers are managed separately."""
 from pathlib import Path
+import re
 
 APP_NAME = "星序"
 APP_WORDMARK = "ORBIT"
@@ -110,3 +111,15 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: trans
 QToolTip { background: #34576e; color: #ffffff; border: 0; padding: 6px; }
 """
 STYLE += 'QCheckBox::indicator:checked { image: url("' + (Path(__file__).parent / "assets" / "check.svg").as_posix() + '"); }'
+
+# Keep typography relative to the base size; spacing and borders remain stable.
+STYLE += """
+QLabel#timer[compact="true"] { font-size: 24px; }
+QLabel#h1[compact="true"] { font-size: 22px; }
+QLabel[textRole="taskTitle"] { font-size: 14px; }
+QLabel[textRole="small"] { font-size: 11px; }
+"""
+
+def scaled_style(font_size=13):
+    return re.sub(r'(font-size:\s*)([0-9.]+)px',
+                  lambda m: m[1]+str(round(float(m[2])*font_size/13))+"px", STYLE)

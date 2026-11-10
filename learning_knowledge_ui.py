@@ -54,7 +54,7 @@ class KnowledgePanel(QFrame):
             return
         point = self.points[index]
         if point['kind'] == 'formula':
-            body = '<pre style="font-family:monospace; font-size:13px">' + escape(point['text']) + '</pre>'
+            body = '<pre style="font-family:monospace">' + escape(point['text']) + '</pre>'
         else:
             body = '<p>' + escape(point['text']).replace('\n', '<br>') + '</p>'
         for key, title in [('scope', '适用范围'), ('conditions', '适用条件'), ('location', '内容定位')]:

@@ -1,7 +1,7 @@
 """Native course binding, background progress and data-only reading/answers."""
 import json
 from pathlib import Path
-from PyQt5.QtCore import Qt, QTimer, QUrl
+from PyQt5.QtCore import Qt, QEvent, QTimer, QUrl
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import (QDialog, QWidget, QScrollArea, QSplitter, QListWidget,
     QListWidgetItem, QTextEdit, QPlainTextEdit, QTabWidget, QLineEdit, QSpinBox,
@@ -256,15 +256,19 @@ class CourseReader(QDialog):
         self.study_record=client.study_state(task_id,course_id) if hasattr(client,'study_state') else {}
         self.study_positions={}; self.active_lesson=None; self.restoring_study=False; self._saved_study=None
         self.lesson_rows=ordered_lessons(self.package)
-        self.setWindowTitle(self.course['title']+' · 开始学习'); self.resize(1400,860); self.setMinimumSize(1040,640)
+        self.setWindowTitle(self.course['title']+' · 开始学习'); self.resize(1400,860); self.setMinimumSize(800,580)
         layout=box(self,margins=(20,20,20,20),spacing=12)
         heading=box(horizontal=True); heading.addWidget(label(self.course['title'],'h2',True),1)
+        self.reference_toggle=button('核心知识与答疑','outline',callback=self.open_reference); heading.addWidget(self.reference_toggle); self.reference_toggle.hide()
         self.tutor_toggle=button('收起答疑','soft',callback=self.toggle_tutor); heading.addWidget(self.tutor_toggle); layout.addLayout(heading)
         if hasattr(parent,'improve'):
             heading.insertWidget(1,button('改进课程','outline',callback=lambda:parent.improve(self.course_id)))
         layout.addWidget(label('课程草稿 · 结构检查不代表教学质量验收；阅读或查看答案不会自动完成任务。','muted',True))
+        self.chapter_choice=QComboBox(); self.chapter_choice.setAccessibleName('当前章节'); self.chapter_choice.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon); self.chapter_choice.setMinimumContentsLength(12)
+        for lesson in self.lesson_rows: self.chapter_choice.addItem(lesson['title'])
+        layout.addWidget(self.chapter_choice); self.chapter_choice.hide()
         self.study_split=QSplitter(Qt.Horizontal); self.study_split.setChildrenCollapsible(False); layout.addWidget(self.study_split,1)
-        self.tabs=QTabWidget(); tabs=self.tabs; tabs.setMinimumWidth(640); self.study_split.addWidget(tabs)
+        self.tabs=QTabWidget(); tabs=self.tabs; tabs.setMinimumWidth(360); self.study_split.addWidget(tabs)
         self.reference_split=QSplitter(Qt.Vertical); self.reference_split.setChildrenCollapsible(False)
         self.reference_split.setHandleWidth(8); self.study_split.addWidget(self.reference_split)
         self.knowledge=KnowledgePanel(self.package); self.reference_split.addWidget(self.knowledge)
@@ -291,7 +295,7 @@ class CourseReader(QDialog):
                     parents=lesson_map[lesson['id']].get('depends_on',[])
                     path_content.addWidget(label('先学：'+'、'.join(titles[p] for p in parents) if parents else '可从这里开始','muted',True))
         self.course_page=QSplitter(); split=self.course_page; tabs.addTab(split,'课程与练习')
-        chapter_nav=QWidget(); chapter_nav.setMinimumWidth(210); chapter_nav.setMaximumWidth(280)
+        chapter_nav=QWidget(); self.chapter_nav=chapter_nav; chapter_nav.setMinimumWidth(210); chapter_nav.setMaximumWidth(280)
         chapters=box(chapter_nav,spacing=10); chapters.addWidget(label(f"章节 · {len(self.package['lessons'])}",'section'))
         self.lessons=QListWidget(); self.lessons.setWordWrap(True); self.lessons.setAccessibleName('课程章节'); chapters.addWidget(self.lessons,1); split.addWidget(chapter_nav)
         self.scroll,self.body=scroll_body(); split.addWidget(self.scroll); split.setStretchFactor(1,1)
@@ -333,6 +337,45 @@ class CourseReader(QDialog):
             self.tutor.question.setPlainText(self.study_record.get('question',''))
             self.tabs.setCurrentWidget(self.course_page)
         self.lessons.setCurrentRow(previous)
+        self.chapter_choice.currentIndexChanged.connect(self.choose_chapter)
+        self.layout_timer=QTimer(self); self.layout_timer.setSingleShot(True); self.layout_timer.timeout.connect(self.adapt_reader)
+        self.reference_dialog=QDialog(self); self.reference_dialog.setWindowTitle('核心知识与随课答疑'); self.reference_dialog.setWindowModality(Qt.NonModal); box(self.reference_dialog)
+        self.adapt_reader()
+        available=self.screen().availableGeometry(); self.resize(min(self.width(),available.width()),min(self.height(),available.height()))
+
+    def choose_chapter(self, index):
+        self.lessons.setCurrentRow(index); self.tabs.setCurrentWidget(self.course_page)
+
+    def open_reference(self):
+        available=self.screen().availableGeometry()
+        self.reference_dialog.resize(min(490,available.width()),min(800,available.height()))
+        self.reference_dialog.show(); self.reference_split.show(); self.reference_dialog.raise_()
+
+    def adapt_reader(self):
+        if not hasattr(self,'reference_dialog'): return
+        font_size=self.font().pixelSize()
+        if font_size<1: font_size=round(self.font().pointSizeF()*self.logicalDpiY()/72)
+        narrow=self.width()<round(960*max(1,font_size/13))
+        self.reference_toggle.setVisible(narrow)
+        self.chapter_nav.setVisible(self.width()>=round(1250*max(1,font_size/13)))
+        self.chapter_choice.setVisible(self.chapter_nav.isHidden())
+        if narrow:
+            if self.reference_split.parentWidget()!=self.reference_dialog:
+                self.reference_split.setParent(self.reference_dialog); self.reference_dialog.layout().addWidget(self.reference_split)
+                self.reference_split.show()
+        else:
+            self.reference_dialog.hide()
+            if self.reference_split.parentWidget()!=self.study_split:
+                self.study_split.addWidget(self.reference_split); self.reference_split.show()
+                self.study_split.setSizes([max(400,self.width()-430),390])
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event); self.adapt_reader()
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() in (QEvent.FontChange,QEvent.StyleChange) and hasattr(self,'reference_dialog'):
+            self.layout_timer.start(0)
 
     def selectable(self, text, name=None):
         widget=label(text,name,True); widget.setTextInteractionFlags(Qt.TextSelectableByMouse|Qt.TextSelectableByKeyboard)
@@ -369,6 +412,7 @@ class CourseReader(QDialog):
         self.restoring_study=True
         clear(self.body); lesson=self.lesson_rows[index]
         self.active_lesson=lesson
+        self.chapter_choice.blockSignals(True); self.chapter_choice.setCurrentIndex(index); self.chapter_choice.blockSignals(False)
         self.tutor.set_lesson(lesson['id'],lesson['title'])
         self.knowledge.set_lesson(lesson)
         self.body.addWidget(self.selectable(lesson['title'],'h2'))
@@ -488,4 +532,6 @@ class CourseReader(QDialog):
         if self.save_answers() and self.save_study(): super().done(code)
 
     def hideEvent(self,event):
-        self.save_study(); super().hideEvent(event)
+        self.save_study()
+        if hasattr(self,'reference_dialog'): self.reference_dialog.hide()
+        super().hideEvent(event)

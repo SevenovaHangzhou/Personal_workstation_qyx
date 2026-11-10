@@ -1,6 +1,6 @@
 """A nonblocking native Q&A sidebar shared by every course reader."""
 from html import escape
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QVariant
+from PyQt5.QtCore import Qt, QEvent, QTimer, pyqtSignal, QVariant
 from PyQt5.QtGui import QKeySequence, QPainter
 from PyQt5.QtWidgets import QFrame, QTextBrowser, QPlainTextEdit, QShortcut, QProgressBar, QLabel, QSizePolicy, QWidget
 from ui_helpers import box, label, button
@@ -25,6 +25,11 @@ class CompactLabel(QLabel):
 
     def setText(self, text):
         super().setText(text); self.setToolTip(text)
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.FontChange:
+            self.setMinimumHeight(self.fontMetrics().height()+2)
 
     def paintEvent(self, event):
         painter=QPainter(self)
