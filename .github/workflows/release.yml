@@ -4,6 +4,9 @@ on:
     branches: [windows]
     tags: ['v*']
   workflow_dispatch:
+concurrency:
+  group: orbit-release-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:

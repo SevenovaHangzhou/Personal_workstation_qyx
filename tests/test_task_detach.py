@@ -1,5 +1,6 @@
 """Dragging a child out or to another parent preserves task identity and data."""
 import copy
+import os
 import tempfile
 import threading
 import unittest
@@ -46,9 +47,18 @@ class DetachTests(unittest.TestCase):
 
     def drop(self,area,source,pos):
         mime=QMimeData(); mime.setData(TASK_MIME,source.task_id.encode())
-        enter=DragEnter(source,pos,mime); APP.sendEvent(area,enter)
+        enter=DragEnter(source,pos,mime)
+        # Windows native drag dispatch requires an actual OLE/QDrag session.
+        # These injected fixtures have no session, so exercise the same drop
+        # handlers directly; sending a synthetic drop through Qt's OLE manager
+        # and entering a modal confirmation can dereference nonexistent state.
+        if os.name=='nt':area.dragEnterEvent(enter)
+        else:APP.sendEvent(area,enter)
         if not enter.isAccepted(): return False
-        event=Drop(source,pos,mime); APP.sendEvent(area,event); APP.processEvents()
+        event=Drop(source,pos,mime)
+        if os.name=='nt':area.dropEvent(event)
+        else:APP.sendEvent(area,event)
+        APP.processEvents()
         return event.isAccepted()
 
     def test_detach_keeps_identity_subtree_bindings_content_status_and_effective_destination(self):
