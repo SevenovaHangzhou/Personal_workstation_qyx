@@ -32,8 +32,21 @@ def status(**data):
     data['reports']=reports
     Path(os.environ['ORBIT_NATIVE_TEST_STATUS']).write_text(json.dumps(data),encoding='utf-8')
 
+uncaught=[]
+last_test='suite-startup'
+def uncaught_exception(kind,value,tb):
+    frames=traceback.extract_tb(tb)
+    locations=' > '.join(f'{Path(f.filename).name}:{f.lineno} ({f.name})' for f in frames[-6:])
+    report=f'uncaught Qt/Python callback | {kind.__name__} | {locations}'
+    uncaught.append(report);reports.append(report)
+    status(test=last_test,phase='uncaught-callback')
+    sys.__excepthook__(kind,value,tb)
+sys.excepthook=uncaught_exception
+
 class Result(unittest.TextTestResult):
     def startTest(self,test):
+        global last_test
+        last_test=test.id()
         super().startTest(test);status(test=test.id(),phase='running')
     def stopTest(self,test):
         super().stopTest(test);status(test=test.id(),phase='completed')
@@ -50,4 +63,4 @@ names=['test_windows','test_model','test_services','test_issue_scope','test_stru
        'test_planning','test_task_move','test_task_detach','test_study_resume','test_release_entry']
 result=unittest.TextTestRunner(verbosity=2,resultclass=Result).run(unittest.defaultTestLoader.loadTestsFromNames(names))
 status(test='suite',phase='completed',count=result.testsRun,failures=len(result.failures),errors=len(result.errors))
-raise SystemExit(0 if result.wasSuccessful() else 1)
+raise SystemExit(0 if result.wasSuccessful() and not uncaught else 1)
