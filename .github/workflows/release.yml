@@ -30,8 +30,6 @@ jobs:
         with:
           name: linux-verification
           path: |
-            linux-tests.log
-            build/linux/*.log
             build/linux/*.png
   windows:
     runs-on: windows-2022
@@ -46,7 +44,7 @@ jobs:
           architecture: x64
       - run: python -m pip install -r requirements.txt pyinstaller==6.22.3
       - name: Native Windows regression tests
-        run: python scripts/test_windows_release.py 2> windows-tests.log
+        run: python scripts/test_windows_release.py
       - name: Build portable app and per-user installer
         run: python scripts/build_windows.py --work-dir build/windows --output artifacts
       - uses: actions/upload-artifact@v4
@@ -58,8 +56,6 @@ jobs:
         with:
           name: windows-verification
           path: |
-            windows-tests.log
-            build/windows/*.log
             build/windows/*.png
   publish:
     if: startsWith(github.ref, 'refs/tags/v')

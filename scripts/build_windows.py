@@ -43,6 +43,13 @@ def main():
                 src=Path(dist.locate_file(relative))
                 if src.is_file():
                     dest=licenses/name/Path(*relative.parts[1:]);dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(src,dest)
+    for candidate in (Path(sys.base_prefix)/'LICENSE.txt',Path(sys.base_prefix)/'LICENSE'):
+        if candidate.is_file():shutil.copy2(candidate,licenses/'Python-LICENSE.txt');break
+    (bundle/'THIRD_PARTY.md').write_text(
+        '# Third-party software\n\nLicenses are included in licenses/ and _internal/licenses/.\n'
+        'Python, PyQt5/Qt and dependencies retain their respective licenses.\n'
+        'YomkServerPy and Work Station source, pins and notices are in the source repository.\n'
+        'Application source: https://github.com/SevenovaHangzhou/Personal_workstation_qyx/tree/v'+APP_VERSION+'\n',encoding='utf-8')
     def probe(root,label):
         with tempfile.TemporaryDirectory(prefix='orbit-win-probe-') as temporary:
             env=dict(os.environ,QT_QPA_PLATFORM='offscreen',USERPROFILE=temporary,HOME=temporary,LOCALAPPDATA=temporary+'/local',APPDATA=temporary+'/roaming',PYINSTALLER_RESET_ENVIRONMENT='1',ORBIT_SKIP_OTA='1')
