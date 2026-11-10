@@ -61,8 +61,10 @@ def main():
         for path in sorted(bundle.rglob('*')):
             if path.is_file():z.write(path,'orbit/'+path.relative_to(bundle).as_posix())
     with tempfile.TemporaryDirectory(prefix='orbit-win-zip-') as temporary:
-        with zipfile.ZipFile(archive) as z:z.extractall(temporary)
-        probe(Path(temporary)/'orbit','portable')
+        import threading
+        from ota_core import extract_windows_package
+        extracted=extract_windows_package(archive,Path(temporary),threading.Event())
+        probe(extracted,'portable')
     iscc=shutil.which('ISCC.exe') or str(Path(os.environ.get('ProgramFiles(x86)','C:/Program Files (x86)'))/'Inno Setup 6/ISCC.exe')
     command([iscc,'/DAppVersion='+APP_VERSION,'/DBundleDir='+str(bundle),'/DOutputDir='+str(output),str(ROOT/'packaging/windows-installer.iss')])
     with tempfile.TemporaryDirectory(prefix='orbit-win-install-') as temporary:
@@ -73,7 +75,7 @@ def main():
     artifacts=[dict(file=p.name,bytes=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest()) for p in (archive,installer)]
     revision=command(['git','rev-parse','HEAD'],cwd=ROOT,capture_output=True,text=True).stdout.strip()
     manifest=dict(version=APP_VERSION,platform='windows-x86_64',minimum_windows='10',source_commit=revision,built_at=datetime.now(timezone.utc).isoformat(),
-        python=platform.python_version(),artifacts=artifacts,verification=['Windows native tests','frozen self-test + graph','portable self-test + graph','installer install/uninstall + self-test + graph','no-console launcher screenshots'],user_data_included=False,codex_credentials_included=False)
+        python=platform.python_version(),runtime_packages={name:metadata.version(name) for name in ('PyQt5','PyQt5-Qt5','PyQt5-sip','readerwriterlock','starlette','tzdata','Send2Trash','pyinstaller')},artifacts=artifacts,verification=['Windows native tests','frozen self-test + graph','portable self-test + graph','installer install/uninstall + self-test + graph','no-console launcher screenshots'],user_data_included=False,codex_credentials_included=False)
     (output/'windows-manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     (output/'WINDOWS-SHA256SUMS').write_text(''.join(f'{row["sha256"]}  {row["file"]}\n' for row in artifacts),encoding='utf-8')
     print(json.dumps(manifest,ensure_ascii=False,indent=2))

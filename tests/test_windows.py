@@ -108,6 +108,29 @@ class WindowsNativeTests(unittest.TestCase):
                 self.assertFalse(result['errors']);self.assertFalse(source.exists());self.assertEqual((external/'secret').read_text(),'outside')
             finally:os.rmdir(root/'linked')
 
+    def test_windows_launcher_switches_update_and_rolls_back_only_before_health(self):
+        import windows_launcher
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);base=root/'base';base.mkdir();(base/'VERSION').write_text('0.9.7')
+            data=root/'local/Sevenova/Orbit';updates=data/'updates';overlay=updates/'releases/0.9.8';overlay.mkdir(parents=True)
+            (overlay/'orbit-bin.exe').write_bytes(b'fixture');(overlay/'ota-install.json').write_text(json.dumps({'version':'0.9.8'}))
+            pointer=updates/'current-version';pointer.write_text('0.9.8')
+            calls=[]
+            def run(command,**options):
+                calls.append(command)
+                return subprocess.CompletedProcess(command,1 if len(calls)==1 else 0)
+            with patch.dict(os.environ,{'LOCALAPPDATA':str(root/'local'),'ORBIT_SKIP_OTA':''}),patch.object(sys,'executable',str(base/'orbit.exe')),patch.object(sys,'argv',['orbit.exe']),patch('windows_launcher.subprocess.run',side_effect=run):
+                self.assertEqual(windows_launcher.main(),0)
+            self.assertEqual(Path(calls[0][0]),overlay/'orbit-bin.exe');self.assertEqual(Path(calls[1][0]),base/'orbit-bin.exe')
+            self.assertFalse(pointer.exists());self.assertEqual((updates/'failed-version').read_text().strip(),'0.9.8')
+            pointer.write_text('0.9.8');calls.clear()
+            def healthy(command,**options):
+                calls.append(command);Path(options['env']['ORBIT_OTA_HEALTH_FILE']).write_text('ready')
+                return subprocess.CompletedProcess(command,1)
+            with patch.dict(os.environ,{'LOCALAPPDATA':str(root/'local'),'ORBIT_SKIP_OTA':''}),patch.object(sys,'executable',str(base/'orbit.exe')),patch.object(sys,'argv',['orbit.exe']),patch('windows_launcher.subprocess.run',side_effect=healthy):
+                self.assertEqual(windows_launcher.main(),1)
+            self.assertEqual(len(calls),1);self.assertTrue(pointer.exists());self.assertFalse(list(updates.glob('launch-health.*')))
+
     def test_native_codex_rpc_pipe_transport(self):
         from codex_support import CodexRpc
         with tempfile.TemporaryDirectory() as temp:
