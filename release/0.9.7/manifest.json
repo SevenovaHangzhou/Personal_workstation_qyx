@@ -1,0 +1,42 @@
+{
+  "version": "0.9.7",
+  "platform": "linux-x86_64",
+  "minimum_glibc": "2.35",
+  "source_commit": "8a3ee0750aacdde8b33a07c7136aba9bcaab5df1",
+  "built_at": "2026-11-10T11:04:08.312425+00:00",
+  "python": "3.12.16",
+  "pyinstaller": "6.22.3",
+  "runtime_packages": {
+    "PyQt5": "5.15.11",
+    "PyQt5-Qt5": "5.15.19",
+    "PyQt5-sip": "12.20.0",
+    "readerwriterlock": "1.0.9",
+    "typing_extensions": "4.16.0",
+    "starlette": "0.52.1",
+    "anyio": "4.15.1",
+    "idna": "3.20"
+  },
+  "artifacts": [
+    {
+      "file": "orbit-0.9.7-linux-x86_64.tar.gz",
+      "bytes": 69231119,
+      "sha256": "7d8a9a6a42db7bedebc232e375c7be90083627009cff8a6b15e21537e2db7c6e"
+    },
+    {
+      "file": "sevenova-orbit_0.9.7_amd64.deb",
+      "bytes": 68083116,
+      "sha256": "c94309eb46bb3fdd48d0814463e17a5d959a7d0ac70b2851a0c67e96a7596f41"
+    }
+  ],
+  "verification": [
+    "frozen --version",
+    "frozen --self-test",
+    "offscreen startup/screenshot",
+    "extracted portable --self-test",
+    "extracted Debian --self-test",
+    "Debian-style command symlink --self-test",
+    "frozen and extracted portable/Debian --self-test --graph (assets + 14 services)"
+  ],
+  "user_data_included": false,
+  "codex_credentials_included": false
+}

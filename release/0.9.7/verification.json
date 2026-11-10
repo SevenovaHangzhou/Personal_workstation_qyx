@@ -1,0 +1,82 @@
+{
+  "version": "0.9.7",
+  "source_commit": "8a3ee0750aacdde8b33a07c7136aba9bcaab5df1",
+  "release_url": "https://github.com/SevenovaHangzhou/Personal_workstation_qyx/releases/tag/v0.9.7",
+  "ci_url": "https://github.com/SevenovaHangzhou/Personal_workstation_qyx/actions/runs/42803958064",
+  "ci_jobs": {
+    "linux": "success",
+    "windows-tests": "success",
+    "windows": "success",
+    "publish": "success"
+  },
+  "linux_tests": {
+    "total": 341,
+    "skipped_windows_only": 5,
+    "result": "passed"
+  },
+  "windows_tests": {
+    "total": 78,
+    "result": "passed"
+  },
+  "package_checks": [
+    "Linux frozen/extracted portable/Debian self-test and graph",
+    "Windows frozen/portable/installed self-test and graph",
+    "Windows per-user installer install/uninstall",
+    "Windows no-console launcher screenshots",
+    "Release manifest sizes and SHA-256 checked by publish job"
+  ],
+  "validation_boundary": "Automated Qt checks use offscreen rendering on Ubuntu 22.04 and Windows Server 2022; interactive Windows 10/11 desktop and actual Codex login were not exercised.",
+  "local_download_repeat": "Not completed: slow public connection followed by GitHub unauthenticated API rate limit. GitHub asset digests and successful CI verification recorded; Linux manifest and both checksum files match their published digests.",
+  "artifacts": [
+    {
+      "file": "manifest.json",
+      "bytes": 1240,
+      "sha256": "1e1275d7d79d437d99a31ea341e25d554917c2404f4d45d2bed55a932088e40b",
+      "url": "https://github.com/SevenovaHangzhou/Personal_workstation_qyx/releases/download/v0.9.7/manifest.json"
+    },
+    {
+      "file": "orbit-0.9.7-linux-x86_64.tar.gz",
+      "bytes": 69231119,
+      "sha256": "7d8a9a6a42db7bedebc232e375c7be90083627009cff8a6b15e21537e2db7c6e",
+      "url": "https://github.com/SevenovaHangzhou/Personal_workstation_qyx/releases/download/v0.9.7/orbit-0.9.7-linux-x86_64.tar.gz"
+    },
+    {
+      "file": "orbit-0.9.7-windows-x86_64-setup.exe",
+      "bytes": 40359768,
+      "sha256": "b221bd6ad79d2a6fb1ed6819450b463d3163245e0cea1db16b39ab51c7e40219",
+      "url": "https://github.com/SevenovaHangzhou/Personal_workstation_qyx/releases/download/v0.9.7/orbit-0.9.7-windows-x86_64-setup.exe"
+    },
+    {
+      "file": "orbit-0.9.7-windows-x86_64.zip",
+      "bytes": 52375692,
+      "sha256": "f15ffee1549d9527b5e037274c27f7c2bcbb77e25fb9afa4b50abaaa0893df87",
+      "url": "https://github.com/SevenovaHangzhou/Personal_workstation_qyx/releases/download/v0.9.7/orbit-0.9.7-windows-x86_64.zip"
+    },
+    {
+      "file": "sevenova-orbit_0.9.7_amd64.deb",
+      "bytes": 68083116,
+      "sha256": "c94309eb46bb3fdd48d0814463e17a5d959a7d0ac70b2851a0c67e96a7596f41",
+      "url": "https://github.com/SevenovaHangzhou/Personal_workstation_qyx/releases/download/v0.9.7/sevenova-orbit_0.9.7_amd64.deb"
+    },
+    {
+      "file": "SHA256SUMS",
+      "bytes": 195,
+      "sha256": "51754670476ffed990ee657849a38f35e3a2a46f0fb165acc2d1a8f1a790f46b",
+      "url": "https://github.com/SevenovaHangzhou/Personal_workstation_qyx/releases/download/v0.9.7/SHA256SUMS"
+    },
+    {
+      "file": "windows-manifest.json",
+      "bytes": 1153,
+      "sha256": "024308bb14e202f1a41d225440df69c25eebc3151bacedcd61c0331b5e49a9f9",
+      "url": "https://github.com/SevenovaHangzhou/Personal_workstation_qyx/releases/download/v0.9.7/windows-manifest.json"
+    },
+    {
+      "file": "WINDOWS-SHA256SUMS",
+      "bytes": 202,
+      "sha256": "0766a83c33d9d166359948b1f13328afb9ae10d7b66f9c6ad1ba347e09c8794c",
+      "url": "https://github.com/SevenovaHangzhou/Personal_workstation_qyx/releases/download/v0.9.7/WINDOWS-SHA256SUMS"
+    }
+  ],
+  "user_data_included": false,
+  "codex_credentials_included": false
+}
