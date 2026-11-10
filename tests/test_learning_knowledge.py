@@ -75,7 +75,7 @@ class ReferenceUiTests(unittest.TestCase):
     def setUp(self):
         self.client = ReferenceClient(reference_course())
         self.reader = CourseReader(None, self.client, 'reference-task', self.client.data['id'])
-        self.reader.show(); self.reader.tabs.setCurrentWidget(self.reader.course_page); QTest.qWait(40)
+        self.reader.resize(1400,860); self.reader.show(); self.reader.tabs.setCurrentWidget(self.reader.course_page); QTest.qWait(40)
 
     def tearDown(self):
         self.reader.close(); self.reader.deleteLater(); APP.processEvents()

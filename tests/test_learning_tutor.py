@@ -186,7 +186,7 @@ class TutorServiceTests(unittest.TestCase):
         self.runner.release.set(); self.ask(); self.wait_done()
 
     def test_reader_sidebar_stays_responsive_and_new_questions_use_switched_chapter(self):
-        reader=self.open_reader(); panel=reader.tutor
+        reader=self.open_reader(); reader.resize(1400,860); APP.processEvents(); panel=reader.tutor
         self.assertIsNone(APP.activeModalWidget()); self.assertTrue(panel.isVisible())
         panel.question.setPlainText('解释第一章'); panel.send(); self.assertTrue(self.runner.started.wait(2))
         self.assertFalse(panel.send_button.isEnabled()); events=[]

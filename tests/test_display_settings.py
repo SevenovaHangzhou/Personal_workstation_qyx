@@ -39,7 +39,7 @@ class DisplayTests(unittest.TestCase):
 
     def test_preview_cancel_restores_geometry_and_task_draft(self):
         self.window.note.setPlainText('不因显示预览而丢失的笔记')
-        self.window.note_debounce.stop(); original=self.window.saveGeometry()
+        self.window.note_debounce.stop()
         dialog=PreferencesDialog(self.window); dialog.show()
         dialog.font_size.setValue(18); dialog.window_mode.setCurrentIndex(dialog.window_mode.findData('compact')); APP.processEvents()
         self.assertEqual(self.display.current.font_size,18)

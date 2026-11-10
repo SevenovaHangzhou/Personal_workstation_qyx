@@ -347,6 +347,7 @@ class CourseReader(QDialog):
         self.lessons.setCurrentRow(index); self.tabs.setCurrentWidget(self.course_page)
 
     def open_reference(self):
+        if self.tutor.isHidden(): self.toggle_tutor()
         available=self.screen().availableGeometry()
         self.reference_dialog.resize(min(490,available.width()),min(800,available.height()))
         self.reference_dialog.show(); self.reference_split.show(); self.reference_dialog.raise_()
@@ -356,7 +357,7 @@ class CourseReader(QDialog):
         font_size=self.font().pixelSize()
         if font_size<1: font_size=round(self.font().pointSizeF()*self.logicalDpiY()/72)
         narrow=self.width()<round(960*max(1,font_size/13))
-        self.reference_toggle.setVisible(narrow)
+        self.reference_toggle.setVisible(narrow); self.tutor_toggle.setVisible(not narrow)
         self.chapter_nav.setVisible(self.width()>=round(1250*max(1,font_size/13)))
         self.chapter_choice.setVisible(self.chapter_nav.isHidden())
         if narrow:
