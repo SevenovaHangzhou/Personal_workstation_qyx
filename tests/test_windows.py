@@ -121,7 +121,7 @@ class WindowsNativeTests(unittest.TestCase):
                 return subprocess.CompletedProcess(command,1 if len(calls)==1 else 0)
             with patch.dict(os.environ,{'LOCALAPPDATA':str(root/'local'),'ORBIT_SKIP_OTA':''}),patch.object(sys,'executable',str(base/'orbit.exe')),patch.object(sys,'argv',['orbit.exe']),patch('windows_launcher.subprocess.run',side_effect=run):
                 self.assertEqual(windows_launcher.main(),0)
-            self.assertEqual(Path(calls[0][0]),overlay/'orbit-bin.exe');self.assertEqual(Path(calls[1][0]),base/'orbit-bin.exe')
+            self.assertEqual(Path(calls[0][0]).resolve(),(overlay/'orbit-bin.exe').resolve());self.assertEqual(Path(calls[1][0]).resolve(),(base/'orbit-bin.exe').resolve())
             self.assertFalse(pointer.exists());self.assertEqual((updates/'failed-version').read_text().strip(),'0.9.8')
             pointer.write_text('0.9.8');calls.clear()
             def healthy(command,**options):

@@ -12,7 +12,7 @@ os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
 class Result(unittest.TextTestResult):
     def startTest(self,test):
         super().startTest(test)
-        print('::notice title=Windows test code::'+test.id(),flush=True)
+        print('Testing '+test.id(),flush=True)
     def report(self,test,error):
         # Publish only code locations and exception class, never exception
         # messages, locals, source snippets, stdout, paths or user values.
@@ -26,5 +26,5 @@ class Result(unittest.TextTestResult):
 names=['test_windows','test_model','test_services','test_issue_scope','test_structure_undo',
        'test_planning','test_task_move','test_task_detach','test_study_resume','test_release_entry']
 result=unittest.TextTestRunner(verbosity=2,resultclass=Result).run(unittest.defaultTestLoader.loadTestsFromNames(names))
-print(f'::notice title=Windows test result::count={result.testsRun} failures={len(result.failures)} errors={len(result.errors)}',flush=True)
+print(f'::warning title=Windows test result::count={result.testsRun} failures={len(result.failures)} errors={len(result.errors)}',flush=True)
 raise SystemExit(0 if result.wasSuccessful() else 1)
