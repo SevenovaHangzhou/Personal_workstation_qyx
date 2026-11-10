@@ -78,4 +78,11 @@ def main():
     (output/'WINDOWS-SHA256SUMS').write_text(''.join(f'{row["sha256"]}  {row["file"]}\n' for row in artifacts),encoding='utf-8')
     print(json.dumps(manifest,ensure_ascii=False,indent=2))
 
-if __name__=='__main__':main()
+if __name__=='__main__':
+    try:main()
+    except Exception as error:
+        import traceback
+        frames=traceback.extract_tb(error.__traceback__)
+        where=' > '.join(f'{Path(f.filename).name}:{f.lineno} ({f.name})' for f in frames[-6:])
+        print('::error title=Windows build location::'+type(error).__name__+' | '+where)
+        raise

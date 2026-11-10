@@ -7,10 +7,12 @@
 
 - 启动约 5 秒后后台检查，此后每 6 小时检查；仅下载比当前版本更新的正式包。
 - 偏好设置、托盘「应用更新」或左下角版本号可打开进度，手动检查、关闭自动检查或取消待更新。
-- 下载不阻塞当前任务。下载完成后验证 GitHub 资产 SHA-256、大小、清单、平台和 glibc 要求；安全解包并使用临时数据运行版本检查与离线自检，不调用模型。
+- 下载不阻塞当前任务。下载完成后验证 GitHub 资产 SHA-256、大小、清单、平台及系统版本要求；安全解包并使用临时数据运行版本检查与离线自检，不调用模型。
 - 完整退出且后台服务停止后切换版本指针，**下次启动生效**。只关闭主窗口会缩到托盘，不切换版本。
-- `.deb`、便携版与 `run.sh` 统一加载用户目录中的更新，无需 sudo。原安装、原源码和原用户数据保留。
+- Linux `.deb`、便携版与 `run.sh` 统一加载用户目录中的更新，无需 sudo。原安装、原源码和原用户数据保留。
 - 0.9.0 尚无更新启动器，需要先手动安装一次 0.9.3；以后可自动升级。直接运行 `python main.py` 或 `orbit-bin` 会绕过启动器，应使用 `run.sh` 或 `orbit`。
+
+Windows 0.9.7 起同样支持退出后更新：安装版与便携版通过 `orbit.exe` 读取 `%LOCALAPPDATA%/Sevenova/Orbit/updates`，下载 Windows 专用 ZIP 和清单，保留原安装。`run.ps1` 为源码启动，不加载已打包更新。
 
 ## 留存与回退
 
@@ -37,6 +39,8 @@ ORBIT_SKIP_OTA=1 ./run.sh
 - `SHA256SUMS`
 - 可选 `.deb` 和版本说明
 
-包根目录为 `orbit/`，包含 `orbit`、`orbit-bin`、`ota-launch.sh` 和 `VERSION`。不修改已发布版本的资产，用新版本号发布修正。GitHub 的资产摘要与包内清单共同用于传输完整性验证；这不构成独立签名体系，发布权限仍属于仓库维护者。
+Windows 资产为 `orbit-<版本>-windows-x86_64.zip`、`windows-manifest.json`、`WINDOWS-SHA256SUMS`，另提供 `setup.exe`。ZIP 根目录为 `orbit/`，包含 `orbit.exe`、`orbit-bin.exe` 与 `VERSION`；解包拒绝路径穿越、Windows 保留文件名和链接。
+
+Linux 包根目录为 `orbit/`，包含 `orbit`、`orbit-bin`、`ota-launch.sh` 和 `VERSION`。不修改已发布版本的资产，用新版本号发布修正。GitHub 的资产摘要与包内清单共同用于传输完整性验证；这不构成独立签名体系，发布权限仍属于仓库维护者。
 
 源码解包需要 Python 3.11.8+；发布包内置 Python 3.12，不依赖系统 Python。公开仓库通常不需登录；遇到权限错误仅复用已有 `GH_TOKEN` / `GITHUB_TOKEN` 或 `gh` 登录，不发起登录流程，也不将令牌写入更新状态。

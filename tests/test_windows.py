@@ -32,7 +32,7 @@ class PortablePlatformTests(unittest.TestCase):
         process=subprocess.Popen([sys.executable,'-u','-c',"import time; print('ready',flush=True); time.sleep(60)"],stdout=subprocess.PIPE,**process_options())
         reader=PipeReader(process.stdout)
         try:
-            self.assertEqual(reader.read(3),b'ready\n');self.assertIsNone(reader.read(.01))
+            self.assertEqual(reader.read(3).rstrip(b'\r\n'),b'ready');self.assertIsNone(reader.read(.01))
             stop_process(process);self.assertIsNotNone(process.poll());self.assertEqual(reader.read(3),b'')
         finally:
             reader.close();stop_process(process);process.stdout.close()
