@@ -76,3 +76,21 @@ class DependencyDialog(QDialog):
         task_id=item.data(Qt.UserRole)
         self.owner.edit_dependencies(task_id, parent=self)
         self.refresh(task_id)
+
+
+class DependencyConflictDialog(QDialog):
+    """Consistent native prompt without platform message-box helper ownership."""
+    def __init__(self,parent,message,before,after):
+        super().__init__(parent);self.setWindowTitle('先理清步骤依赖')
+        self.setMinimumWidth(420);self.resize(500,220)
+        layout=box(self,margins=(24,20,24,20),spacing=14)
+        layout.addWidget(label('先理清依赖，再移动','h2'))
+        self.message=label(message,wrap=True);layout.addWidget(self.message)
+        layout.addWidget(label(f'当前有 {before} 项前置、{after} 项直接后续依赖。','muted',True))
+        layout.addWidget(label('调整相关步骤后，可以返回重新移动；现有任务和依赖均已保留。','muted',True))
+        actions=box(horizontal=True);actions.addStretch()
+        actions.addWidget(button('返回','outline',callback=self.reject))
+        manage=button('管理相关依赖','primary',callback=self.accept);manage.setObjectName('manageDependencies')
+        actions.addWidget(manage);layout.addLayout(actions)
+
+    def text(self):return self.message.text()

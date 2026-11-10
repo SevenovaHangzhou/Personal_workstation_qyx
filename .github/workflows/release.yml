@@ -34,7 +34,7 @@ jobs:
           name: linux-verification
           path: |
             build/linux/*.png
-  windows:
+  windows-tests:
     runs-on: windows-2022
     env:
       QT_QPA_PLATFORM: offscreen
@@ -48,8 +48,19 @@ jobs:
       - run: python -m pip install -r requirements.txt pyinstaller==6.22.3
       - name: Native Windows regression tests
         run: python scripts/test_windows_release.py
+  windows:
+    runs-on: windows-2022
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - run: python -m pip install -r requirements.txt pyinstaller==6.22.3
       - name: Build portable app and per-user installer
-        if: ${{ !cancelled() }}
         run: python scripts/build_windows.py --work-dir build/windows --output artifacts
       - uses: actions/upload-artifact@v4
         with:
@@ -63,7 +74,7 @@ jobs:
             build/windows/*.png
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [linux, windows]
+    needs: [linux, windows-tests, windows]
     runs-on: ubuntu-22.04
     permissions:
       contents: write

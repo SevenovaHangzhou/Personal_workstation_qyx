@@ -3,6 +3,13 @@
 import argparse
 import os
 import sys
+
+# PyInstaller's Windows interpreter ignores PYTHONUTF8 at bootstrap. Console
+# pipes can otherwise default to CP1252 and fail on the Chinese app name/logs.
+if os.name=='nt':
+    for stream in (sys.stdout,sys.stderr):
+        if stream is not None and hasattr(stream,'reconfigure'):
+            stream.reconfigure(encoding='utf-8',errors='backslashreplace')
 from datetime import date
 from pathlib import Path
 
@@ -469,10 +476,9 @@ class Momo(QMainWindow):
             from task_dependencies_ui import related_tasks
             before,after=related_tasks(self.tasks.tasks,task_id)
             if before or after:
-                message=QMessageBox(self); message.setWindowTitle('先理清步骤依赖'); message.setIcon(QMessageBox.Information)
-                message.setText(str(exc)); message.setInformativeText(f'当前有 {len(before)} 项前置、{len(after)} 项直接后续依赖。')
-                manage=message.addButton('管理相关依赖',QMessageBox.ActionRole); message.addButton('返回',QMessageBox.RejectRole)
-                message.exec_(); chosen=message.clickedButton() is manage; message.deleteLater()
+                from task_dependencies_ui import DependencyConflictDialog
+                message=DependencyConflictDialog(self,str(exc),len(before),len(after))
+                chosen=message.exec_()==QDialog.Accepted; message.deleteLater()
                 if chosen: self.manage_dependencies(task_id)
             else: QMessageBox.warning(self,'无法移出',str(exc))
             return False

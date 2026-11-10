@@ -136,6 +136,16 @@ class DetachTests(unittest.TestCase):
         self.assertEqual(self.tasks.get(self.parent['id'])['steps'][0]['id'],self.sibling['id'])
         with self.assertRaisesRegex(ValueError,'后代'): self.tasks.merge(self.child['id'],self.nested['id'])
 
+    def test_dependency_conflict_manage_action_keeps_task_and_opens_editor(self):
+        window=self.open();self.tasks.dependencies(self.child['id'],[self.sibling['id']])
+        before=self.tasks.get(self.child['id'])
+        def manage():APP.activeModalWidget().findChild(QPushButton,'manageDependencies').click()
+        with patch.object(window,'manage_dependencies') as editor:
+            QTimer.singleShot(20,manage)
+            self.assertFalse(window.detach_task(self.child['id']))
+            editor.assert_called_once_with(self.child['id'])
+        self.assertEqual(self.tasks.get(self.child['id']),before)
+
     def test_root_and_external_drop_rejected_and_dependency_error_explained(self):
         def checkpoint(phase):
             if os.environ.get('ORBIT_NATIVE_TEST_STATUS'):
