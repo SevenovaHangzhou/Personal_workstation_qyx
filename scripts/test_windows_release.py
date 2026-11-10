@@ -1,5 +1,6 @@
 """Native regression supervisor; publish only code locations and test counts."""
 import json
+import ast
 import os
 import re
 from pathlib import Path
@@ -17,7 +18,14 @@ NAMES=['test_windows','test_model','test_services','test_issue_scope','test_stru
        'test_planning','test_task_move','test_task_detach','test_study_resume','test_release_entry']
 if os.environ.get('ORBIT_NATIVE_TEST_CHILD')!='1':
     failed=False
+    cases=[]
     for module in NAMES:
+        if module=='test_task_detach':
+            tree=ast.parse((ROOT/'tests'/f'{module}.py').read_text())
+            cases.extend(f'{module}.{cls.name}.{method.name}' for cls in tree.body if isinstance(cls,ast.ClassDef)
+                         for method in cls.body if isinstance(method,ast.FunctionDef) and method.name.startswith('test_'))
+        else:cases.append(module)
+    for module in cases:
         with tempfile.TemporaryDirectory(prefix='orbit-test-status-') as temp:
             path=Path(temp)/'status.json'
             env=dict(os.environ,ORBIT_NATIVE_TEST_CHILD='1',ORBIT_NATIVE_TEST_STATUS=str(path),ORBIT_NATIVE_TEST_MODULE=module)
@@ -69,7 +77,7 @@ class Result(unittest.TextTestResult):
     def addFailure(self,test,error):super().addFailure(test,error);self.report(test,error)
     def addError(self,test,error):super().addError(test,error);self.report(test,error)
 
-module=os.environ['ORBIT_NATIVE_TEST_MODULE'];assert module in NAMES
+module=os.environ['ORBIT_NATIVE_TEST_MODULE'];assert module.split('.')[0] in NAMES
 names=[module]
 result=unittest.TextTestRunner(verbosity=2,resultclass=Result).run(unittest.defaultTestLoader.loadTestsFromNames(names))
 status(test='suite',phase='completed',count=result.testsRun,failures=len(result.failures),errors=len(result.errors))

@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -55,7 +56,16 @@ def main():
             env=dict(os.environ,QT_QPA_PLATFORM='offscreen',USERPROFILE=temporary,HOME=temporary,LOCALAPPDATA=temporary+'/local',APPDATA=temporary+'/roaming',PYINSTALLER_RESET_ENVIRONMENT='1',ORBIT_SKIP_OTA='1')
             for key in ('PYTHONPATH','PYTHONHOME','YOMK_PREFIX_PATH','CODEX_HOME'):env.pop(key,None)
             for switches,suffix in [(['--version'],'version'),(['--self-test'],'self-test'),(['--self-test','--graph','--graph-port','0'],'graph-self-test')]:
-                r=command([str(root/'orbit-bin.exe'),*switches],cwd=temporary,env=env,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=60)
+                r=subprocess.run([str(root/'orbit-bin.exe'),*switches],cwd=temporary,env=env,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=60)
+                if r.returncode:
+                    # Only public code/module identifiers; never emit the raw
+                    # captured text, exception message, variables or full paths.
+                    captured=r.stdout+'\n'+r.stderr
+                    locations=[f'{Path(file).name}:{line} ({function})' for file,line,function in re.findall(r'File "([^"\n]+)", line ([0-9]+), in ([A-Za-z_<>][A-Za-z0-9_<>]*)',captured)]
+                    kinds=re.findall(r'^([A-Za-z_][A-Za-z0-9_]*(?:Error|Exception))(?::|$)',captured,re.MULTILINE)
+                    missing=re.findall(r"No module named '([A-Za-z_][A-Za-z0-9_.]*)'",captured)
+                    print(f'::error title=Windows frozen probe::{label}/{suffix} exit={r.returncode} types={kinds} missing_modules={missing} code='+ ' > '.join(locations[-6:]),flush=True)
+                    r.check_returncode()
                 (work/(label+'-'+suffix+'.log')).write_text(r.stdout+r.stderr,encoding='utf-8')
                 if suffix=='version':assert APP_VERSION in r.stdout
                 else:assert 'daily-mcp-config-override' in r.stdout
