@@ -1,7 +1,7 @@
 name: Build and publish ORBIT
 on:
   push:
-    branches: [windows, main]
+    branches: [windows]
     tags: ['v*']
   workflow_dispatch:
 permissions:
@@ -46,10 +46,7 @@ jobs:
           architecture: x64
       - run: python -m pip install -r requirements.txt pyinstaller==6.22.3
       - name: Native Windows regression tests
-        run: |
-          $env:PYTHONPATH = "$pwd;$pwd\tests"
-          python -m unittest test_windows test_model test_services test_issue_scope test_structure_undo test_planning test_task_move test_task_detach test_study_resume test_release_entry -v *> windows-tests.log
-          if ($LASTEXITCODE -ne 0) { Get-Content windows-tests.log -Tail 100; exit $LASTEXITCODE }
+        run: python scripts/test_windows_release.py 2> windows-tests.log
       - name: Build portable app and per-user installer
         run: python scripts/build_windows.py --work-dir build/windows --output artifacts
       - uses: actions/upload-artifact@v4
