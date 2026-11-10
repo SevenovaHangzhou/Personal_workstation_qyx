@@ -151,7 +151,10 @@ class DetachTests(unittest.TestCase):
         self.tasks.dependencies(self.child['id'],[self.sibling['id']])
         messages=[]
         def close_conflict():
-            dialog=APP.activeModalWidget(); messages.append(dialog.text()); dialog.reject()
+            checkpoint('modal-timer-fired')
+            dialog=APP.activeModalWidget(); checkpoint('modal-widget-found')
+            messages.append(dialog.text()); checkpoint('modal-text-read')
+            dialog.reject(); checkpoint('modal-rejected')
         QTimer.singleShot(10,close_conflict)
         checkpoint('opening-dependency-dialog')
         if os.name=='nt':self.assertFalse(window.detach_task(self.child['id']))

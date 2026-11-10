@@ -49,6 +49,7 @@ jobs:
       - name: Native Windows regression tests
         run: python scripts/test_windows_release.py
       - name: Build portable app and per-user installer
+        if: ${{ !cancelled() }}
         run: python scripts/build_windows.py --work-dir build/windows --output artifacts
       - uses: actions/upload-artifact@v4
         with:
