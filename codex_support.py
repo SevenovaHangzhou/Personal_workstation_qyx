@@ -5,14 +5,14 @@ Only explicit chat creation may write a thread. Never submit a turn or execute t
 import json
 import os
 import re
-import select
-import shutil
+from platform_support import PipeReader, process_options, stop_process
 import subprocess
 import sqlite3
 import time
 from pathlib import Path
 from typedefine.TypeDefine import APP_VERSION
 from station_executor import CodexExecutor
+from process_environment import find_codex
 
 
 class CodexError(Exception):
@@ -62,16 +62,18 @@ class CodexRpc:
         self.cancel_event = cancel_event
         self.process = None
         self.buffer = bytearray()
+        self.reader = None
         self.serial = 0
 
     def __enter__(self):
-        executable = shutil.which("codex")
+        executable = find_codex()
         if not executable:
-            raise CodexError("未找到 Codex CLI。请安装并登录 Codex，或使用下方链接手动关联。")
+            raise CodexError("未找到可执行的 Codex CLI。请确认已安装在系统 PATH 或 ~/.local/bin，或使用下方链接手动关联。")
         try:
             env = CodexExecutor().environment()
             self.process = subprocess.Popen([executable, "app-server", "--listen", "stdio://"],
-                                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env)
+                                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env, **process_options())
+            self.reader = PipeReader(self.process.stdout)
             self.request("initialize", {"clientInfo": {"name": "momo_task_manager", "title": "ORBIT", "version": APP_VERSION},
                                         "capabilities":{"experimentalApi":True}}, timeout=15)
             self.send({"method": "initialized"})
@@ -103,9 +105,8 @@ class CodexRpc:
                     raise CodexError("Codex 返回了无法解析的数据，请检查 CLI 版本") from None
             if time.monotonic() >= deadline:
                 raise CodexError("读取 Codex 超时，请稍后刷新或手动关联")
-            ready, _, _ = select.select([self.process.stdout], [], [], min(0.1, max(0, deadline-time.monotonic())))
-            if ready:
-                chunk = os.read(self.process.stdout.fileno(), 65536)
+            chunk = self.reader.read(min(0.1, max(0, deadline-time.monotonic())))
+            if chunk is not None:
                 if not chunk:
                     raise CodexError("Codex app-server 已退出，请检查 CLI 是否可用")
                 self.buffer.extend(chunk)
@@ -201,12 +202,9 @@ class CodexRpc:
     def close(self):
         if not self.process:
             return
+        if self.reader:self.reader.close()
         if self.process.poll() is None:
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=1)
-            except subprocess.TimeoutExpired:
-                self.process.kill(); self.process.wait(timeout=1)
+            stop_process(self.process)
         for stream in [self.process.stdin, self.process.stdout]:
             if stream:
                 stream.close()

@@ -1,39 +1,37 @@
 # 星序 ORBIT 发布
 
-当前版本：**0.9.3** · Linux x86_64 · Ubuntu 22.04 构建（glibc 2.35+）。
+当前版本：**0.9.7**。
 
-[下载 0.9.3 应用](https://github.com/SevenovaHangzhou/Personal_workstation_qyx/releases/tag/v0.9.3)
+[下载安装包](https://github.com/SevenovaHangzhou/Personal_workstation_qyx/releases/latest) · [版本说明](0.9.7/RELEASE_NOTES.md)
 
-- `sevenova-orbit_0.9.3_amd64.deb`：安装后从应用菜单启动，命令为 `orbit`。
-- `orbit-0.9.3-linux-x86_64.tar.gz`：解压后运行 `orbit/orbit`，无需 Python 或虚拟环境。
-- [SHA256SUMS](0.9.3/SHA256SUMS)、[构建清单](0.9.3/manifest.json)、[版本说明](0.9.3/RELEASE_NOTES.md)。
+| 系统 | 安装版 | 便携版 |
+| --- | --- | --- |
+| Linux x86_64，glibc 2.35+ | `sevenova-orbit_0.9.7_amd64.deb` | `orbit-0.9.7-linux-x86_64.tar.gz` |
+| Windows 10 / 11 x64 | `orbit-0.9.7-windows-x86_64-setup.exe` | `orbit-0.9.7-windows-x86_64.zip` |
 
-安装示例：
+Linux 安装：`sudo apt install ./sevenova-orbit_0.9.7_amd64.deb`；便携包解压后运行 `orbit/orbit`。
+Windows 双击安装包，或解压便携包运行 `orbit.exe`。安装无需管理员权限，可选桌面快捷方式。
 
-```bash
-sudo apt install ./sevenova-orbit_0.9.3_amd64.deb
-```
+均内置 Python 环境。Codex CLI 与 Git 沿用本机配置；升级前从旧版托盘退出。
+数据位于 Linux `~/.local/share/Sevenova/Orbit`、Windows `%LOCALAPPDATA%/Sevenova/Orbit`；旧 Linux 数据自动迁移并保留兼容路径。
+包中不包含用户数据、聊天或登录凭据。卸载不删除用户数据。
 
-两个包复用现有用户数据 `~/.local/share/MomoLocal/Momo`；升级前先从旧版本托盘退出。
-Codex CLI 与 Git 使用本机安装和配置，包中不包含聊天、课程生成记录、API key 或登录凭据。
-卸载 `.deb` 不删除用户数据。启动日志写入 `~/.local/state/orbit/`（或 `XDG_STATE_HOME`），不写安装目录。
+[OTA 更新](../OTA.md)在完整退出后切换，下次启动生效；原安装保留。Windows 凭据由 DPAPI 按当前系统用户加密，安装包尚未商业签名。
 
-离线自检：`QT_QPA_PLATFORM=offscreen orbit --self-test`。仅使用临时数据，不调用模型。
+## 构建
 
-从 0.9.3 起支持 [用户目录 OTA](../OTA.md)：后台准备，完整退出后切换，下次启动生效；原安装保留。旧版 0.9.0 需手动升级一次。
-
-## 本地构建
-
-使用已有应用依赖和 Python 3.12，另安装 [构建依赖](../packaging/requirements-build.txt)：
+Linux（Python 3.12、Git、dpkg-deb）：
 
 ```bash
-.venv/bin/python -m pip install -r packaging/requirements-release.txt -r packaging/requirements-build.txt
-.venv/bin/python scripts/build_release.py
+python -m pip install -r packaging/requirements-release.txt -r packaging/requirements-build.txt
+python scripts/build_release.py
 ```
 
-还需要 `dpkg-deb` 和 Git。构建脚本不会下载依赖，会复用当前解释器的本地包；临时 ASCII 导入别名兼容中文工程目录。输出位于 `release/0.9.3/`，构建日志与截图位于 `build/release/`。已有发布文件不会被覆盖，可用 `--output` 指定新的空目录。
+Windows x64（Python 3.12、Git、Inno Setup 6）：
 
-构建验证覆盖冻结应用、便携包解压、Debian 包解包后的启动与隔离自检；桌面托盘宿主和不同发行版仍需实机验证。
-安装包上传 GitHub Release，源码库保留说明与校验清单，避免二进制反复进入 Git 历史。
+```powershell
+python -m pip install -r requirements.txt pyinstaller==6.22.3
+python scripts/build_windows.py
+```
 
-打包资源布局参考 [PyInstaller 官方说明](https://pyinstaller.org/en/stable/runtime-information.html)。
+输出位于 `release/0.9.7/`。构建脚本验证冻结应用、解压后启动及隔离数据自检；Windows 还验证静默安装和卸载。GitHub Actions 在两个原生系统构建并校验 hash 后发布，源码库仅保留说明与校验清单。

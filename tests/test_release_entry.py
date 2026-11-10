@@ -36,3 +36,14 @@ class ReleaseEntryTests(unittest.TestCase):
             root = Path(temporary); target = root/'keep-untouched'
             result = self.probe('--self-test', '--data-dir', str(target), root=root)
             self.assertEqual(result.returncode, 2); self.assertFalse(target.exists())
+
+    def test_graph_selftest_isolated_with_local_assets_and_full_inventory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result = self.probe('--self-test', '--graph', '--graph-port', '0', root=root)
+            self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+            self.assertIn('graph-9-business-5-builtin', result.stdout)
+            self.assertIn('graph-http-assets', result.stdout)
+            self.assertIn('graph-query-does-not-pollute', result.stdout)
+            self.assertIn('"model_called": false', result.stdout)
+            self.assertFalse(list(root.rglob('tasks.json')))

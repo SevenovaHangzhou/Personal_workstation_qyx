@@ -1,0 +1,42 @@
+{
+  "version": "0.9.5",
+  "ui_tests": {
+    "count": 17,
+    "result": "passed"
+  },
+  "release_entry_tests": {
+    "count": 3,
+    "result": "passed"
+  },
+  "package_checks": [
+    "frozen --version",
+    "frozen --self-test",
+    "offscreen startup/screenshot",
+    "extracted portable --self-test",
+    "extracted Debian --self-test",
+    "Debian-style command symlink --self-test"
+  ],
+  "window_activation_tests": {
+    "count": 8,
+    "result": "passed"
+  },
+  "daily_and_lock_tests": {
+    "count": 14,
+    "result": "passed"
+  },
+  "frozen_wake_check": {
+    "frozen_second_launch": "passed",
+    "hidden_window_restored": true,
+    "maximized_state_preserved": true,
+    "data_unchanged": true,
+    "secondary_exit_code": 0
+  },
+  "source_dirty": true,
+  "restored_builtin_course_sha256": "c3d692c6f2450f77f1227c50c16dd8a5db7b36d635486057f30717093957f98e",
+  "installed": "/home/zlz/.local/share/applications/.orbit-runtime/0.9.5",
+  "desktop_launcher": "/home/zlz/.local/share/applications/com.sevenova.Orbit.desktop",
+  "previous_installation_preserved": true,
+  "running_instance_restarted": false,
+  "user_data_modified_by_installation": false,
+  "published_to_github": false
+}

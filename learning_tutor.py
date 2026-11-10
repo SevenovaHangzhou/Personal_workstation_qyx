@@ -1,7 +1,8 @@
+from platform_support import process_options
 """Course-scoped tutoring through the system Codex CLI; no course mutations."""
 import copy
+from observation import job
 import json
-import shutil
 import subprocess
 import threading
 import time
@@ -11,6 +12,7 @@ from pathlib import Path
 
 from codex_support import redact
 from station_executor import CodexExecutor
+from process_environment import find_codex
 
 TUTOR_MODEL = 'gpt-5.6-sol'
 ACTIVE = {'queued', 'running'}
@@ -70,7 +72,7 @@ def tutor_prompt(context, history, question, excerpt):
 
 class TutorRunner:
     def run(self, request, folder, cancel, progress):
-        binary = shutil.which('codex')
+        binary = find_codex()
         if not binary:
             raise RuntimeError('未找到本机 Codex CLI，请检查系统配置后重试')
         folder = Path(folder); folder.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -83,7 +85,7 @@ class TutorRunner:
                    '-o', str(output), '-']
         with (folder / 'events.jsonl').open('wb') as out, (folder / 'stderr.log').open('wb') as err:
             process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=out, stderr=err,
-                                       env=CodexExecutor().environment(), start_new_session=True)
+                                       env=CodexExecutor().environment(), **process_options())
             last_error = ''
             try:
                 process.stdin.write(prompt.encode('utf-8')); process.stdin.close()
@@ -233,6 +235,7 @@ class LearningTutor:
                 self.workers.pop(identifier, None)
                 self._record_error(key, identifier, 'failed', '回答线程未能启动，请重新提问')
 
+    @job("@TutorWorker", "/LearningService", "/answer-question")
     def _run(self, key, identifier, request, cancel):
         def progress(message):
             with self.lock:

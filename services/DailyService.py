@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import re
 from framework import api
+from observation import entry, daily_writer
 from services.base import MomoService, ok, require, request_data
 from daily_store import DailyStore
 from daily_history import ZONE, latest_due
@@ -18,7 +19,7 @@ class DailyService(MomoService):
         self.store = DailyStore(folder)
         from storage_retention import Retention
         self.retention=Retention(self.store.folder.parent)
-        self.engine = DailyEngine(self.store, tasks, linear.writer, station)
+        self.engine = DailyEngine(self.store, tasks, lambda: daily_writer(linear.writer), station)
         self.engine.progress = self.progress
         self.linear = linear
         self.auto_tick = auto_tick
@@ -95,7 +96,7 @@ class DailyService(MomoService):
                 require(self.alive, '日报服务已停止')
             require(isinstance(pkg, dict) and set(pkg) <= {'team_id'}, '无效归属查询')
             require(isinstance(pkg.get('team_id',''),str), '无效团队 ID')
-            return ok(self.linear.writer().choices(pkg.get('team_id','')))
+            return ok(daily_writer(self.linear.writer).choices(pkg.get('team_id','')))
         except Exception as exc:
             return api.YomkResponse(api.ResStatus.eNo, str(exc))
 
@@ -126,6 +127,7 @@ class DailyService(MomoService):
     def retention_preview(self,pkg):return self.retention_request(pkg)
     def retention_apply(self,pkg):return self.retention_request(pkg,True)
 
+    @entry("/DailyService")
     def _loop(self):
         retry_at = 0
         while not self.cancel.is_set():

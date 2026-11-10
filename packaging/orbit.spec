@@ -4,6 +4,8 @@ import ssl
 
 root = Path(SPECPATH).parent
 data = [(str(root/'assets'), 'assets'),
+        (str(root/'yomk_graph/web'), 'yomk_graph/web'),
+        (str(root/'vendor/yomkgraph-pin.json'), 'licenses/YomkGraph'),
         (str(root/'.agents/skills/learning-course-authoring'), '.agents/skills/learning-course-authoring')]
 # Some bundled Python runtimes load an adjacent public CA policy file when
 # creating SSLContext. Keep that runtime policy intact in the frozen app.
@@ -16,10 +18,10 @@ for name, source in [('YomkServerPy', root/'vendor/yomkserverpy/LICENSE.txt'),
 a = Analysis([str(root/'main.py')],
              pathex=[str(root), str(root/'runtime/python'), str(root/'vendor/work_station')],
              binaries=[], datas=data,
-             hiddenimports=['YomkApi', 'YomkServerPy', 'YomkServerPyVersion'],
+             hiddenimports=['YomkApi', 'YomkServerPy', 'YomkServerPyVersion', 'yomk_graph', 'yomk_graph.python', 'yomk_graph.collector', 'yomk_graph.server'],
              hookspath=[], runtime_hooks=[], excludes=['tkinter', 'PyQt6', 'PySide2', 'PySide6'],
              noarchive=False)
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='orbit-bin', debug=False,
-          bootloader_ignore_signals=False, strip=False, upx=False, console=True)
+          bootloader_ignore_signals=False, strip=False, upx=False, console=True, icon=str(root/'assets/orbit.ico') if (root/'assets/orbit.ico').exists() else None)
 coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name='orbit')

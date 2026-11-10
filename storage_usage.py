@@ -11,6 +11,9 @@ GROUPS=(('daily/git','Git 每日留存',True),('daily/compression','日报压缩
 
 
 def scan_usage(root, cancelled=None, now=None):
+    if os.name=="nt":
+        from windows_storage import scan_usage as native_scan
+        return native_scan(root,cancelled,now)
     root=Path(root);now=time.time() if now is None else now
     rows=[dict(path=path,title=title,history=history,bytes=0,files=0,older30=0,older90=0) for path,title,history in GROUPS]
     result=dict(rows=rows,skipped_links=0,errors=0,cancelled=False,scanned_at=now)

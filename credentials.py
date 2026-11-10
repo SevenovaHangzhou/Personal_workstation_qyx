@@ -1,5 +1,4 @@
 """Device-local credentials, kept outside task JSON and the application bundle."""
-import hashlib
 import os
 import stat
 import tempfile
@@ -10,7 +9,8 @@ class CredentialStore:
     def __init__(self, data_directory):
         self.directory = Path(data_directory) / ".credentials"
         self.path = self.directory / "linear.key"
-        self.service = "momo-linear-" + hashlib.sha256(str(Path(data_directory).resolve()).encode()).hexdigest()[:20]
+        from data_paths import credential_identity
+        self.service = credential_identity(data_directory)
 
     def keyring(self):
         if not os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
@@ -25,6 +25,9 @@ class CredentialStore:
         return None
 
     def load(self):
+        if os.name=="nt":
+            from windows_credentials import load
+            return load(self.path)
         backend = self.keyring()
         if backend:
             try:
@@ -53,6 +56,9 @@ class CredentialStore:
     def save(self, value):
         if not value or len(value) > 4096 or any(c.isspace() for c in value):
             raise ValueError("密钥格式无效")
+        if os.name=="nt":
+            from windows_credentials import save
+            return save(self.path,value)
         backend = self.keyring()
         if backend:
             try:
@@ -77,6 +83,9 @@ class CredentialStore:
         return "file"
 
     def clear(self):
+        if os.name=="nt":
+            from windows_credentials import clear
+            return clear(self.path)
         if self.directory.is_symlink():
             raise OSError("凭据目录不能是符号链接")
         backend = self.keyring()

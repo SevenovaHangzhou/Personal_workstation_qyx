@@ -13,7 +13,10 @@ orbit_ota_pointer() {
 orbit_ota_launch() {
     local orbit_base="$1"; shift
     [[ "${ORBIT_SKIP_OTA:-0}" != 1 ]] || return 0
-    local orbit_arg orbit_expect=0 orbit_data="${XDG_DATA_HOME:-$HOME/.local/share}/MomoLocal/Momo"
+    local orbit_arg orbit_expect=0 orbit_data="${XDG_DATA_HOME:-$HOME/.local/share}/Sevenova/Orbit"
+    if [[ ! -d "$orbit_data" && -d "${XDG_DATA_HOME:-$HOME/.local/share}/MomoLocal/Momo" ]]; then
+        orbit_data="${XDG_DATA_HOME:-$HOME/.local/share}/MomoLocal/Momo"
+    fi
     for orbit_arg in "$@"; do
         [[ "$orbit_arg" != --self-test ]] || return 0
         if (( orbit_expect )); then orbit_data="$orbit_arg"; orbit_expect=0; continue; fi

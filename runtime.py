@@ -2,6 +2,7 @@
 import threading
 from pathlib import Path
 from framework import api
+from observation import Observation, caller
 from boot.MomoBoot import MomoBoot
 from clients import TaskClient, FocusClient, LinearClient, CodexClient, DailyClient, LearningClient
 from clients import UpdateClient
@@ -16,7 +17,7 @@ class MomoRuntime:
     _lock = threading.Lock()
     _active = False
 
-    def __init__(self, path, auto_tick=True):
+    def __init__(self, path, auto_tick=True, graph_port=None):
         self.path = Path(path)
         self.boot = MomoBoot(self.path, auto_tick)
         self.tasks = TaskClient()
@@ -32,26 +33,29 @@ class MomoRuntime:
         self.learning_service = None
         self.update_service = None
         self._data_lock = None
+        self.graph = Observation(api, graph_port) if graph_port is not None else None
 
     def start(self):
         with self._lock:
             if self._active:
-                raise RuntimeError("同一进程只能运行一个 Momo 空间")
+                raise RuntimeError("同一进程只能运行一个星序空间")
             if api.init(2) is None:
                 raise RuntimeError("YomkServerPy 已关闭；请在新进程中启动")
             type(self)._active = True
             self.started = True
         try:
             # Lock before loading/migrating tasks, not only before opening Station.
-            import fcntl
+            from platform_support import lock_file
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self._data_lock = (self.path.parent / "momo.lock").open("a+")
             try:
-                fcntl.flock(self._data_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                lock_file(self._data_lock)
             except OSError:
-                raise DataSpaceInUse("此 Momo 数据空间已在运行，请打开已有窗口") from None
-            if api.boot(self.boot) != 0:
-                raise RuntimeError("Momo Boot failed")
+                raise DataSpaceInUse("此星序数据空间已在运行，请打开已有窗口") from None
+            if self.graph: self.graph.attach()
+            with caller("@Boot"):
+                if api.boot(self.boot) != 0:
+                    raise RuntimeError("星序服务启动失败")
             from station_backend import EmbeddedStation
             self.station = EmbeddedStation(self.path.parent / "station", self.tasks)
             from services.DailyService import DailyService
@@ -72,56 +76,107 @@ class MomoRuntime:
                 raise RuntimeError('更新服务启动失败')
             self.boot.registered.append('/UpdateService')
             self.update_service.start_clock()
-        except Exception:
-            self.close(apply_update=False)
+            if self.graph: self.graph.start_http()
+        except Exception as startup_error:
+            try:
+                self.close(apply_update=False)
+            except Exception as cleanup_error:
+                startup_error.add_note("启动清理失败："+str(cleanup_error))
             raise
         return self
 
-    def close(self, apply_update=True):
+    def close(self, apply_update=True, final_shutdown=False):
+        """Control-thread teardown. Attempt every drain even if one reports failure.
+
+        final_shutdown drains the framework request pool as well, without clearing
+        its service table; the existing main() path still owns api.shutdown().
+        Normal test/context-manager closes can reuse the initialized framework.
+        """
         if not self.started:
             return
         errors = []
-        if self.update_service:
-            self.update_service.stop()
-        if self.learning_service:
-            self.learning_service.stop()
-        if self.daily_service:
-            self.daily_service.stop_clock()
-        if self.station:
-            self.station.close()
-            self.station = None
+        def attempt(label, function):
+            try:
+                function()
+            except Exception as exc:
+                errors.append(label+"："+str(exc))
+        if self.graph:
+            self.graph._control_thread()
+            attempt("停止观测 HTTP", self.graph.stop_http)
+        # Stop all producers before removing services or restoring request().
+        for label, service, method in [
+            ("更新线程", self.update_service, "stop"),
+            ("学习线程", self.learning_service, "stop"),
+            ("日报线程", self.daily_service, "stop_clock"),
+            ("工作站线程", self.station, "close"),
+        ]:
+            if service:
+                attempt(label, getattr(service, method))
         focus = self.boot.focus_service
         if focus:
-            try:
-                focus.stop_clock()
-            except Exception as exc:
-                errors.append(str(exc))
-            try:
-                self.focus.pause()
-            except (ValueError, OSError) as exc:
-                errors.append(str(exc))
+            attempt("专注时钟", focus.stop_clock)
             if focus.loop_started:
-                result = api.event_loop_destroy(FOCUS_LOOP)
-                if result.status != api.ResStatus.eOk:
-                    errors.append(result.msg)
-        for name in reversed(self.boot.registered):
-            if api.del_service(name) != 0:
-                errors.append("服务注销失败：" + name)
-        self.boot.registered.clear()
-        for key in reversed(self.boot.context_keys):
-            api.context_destroy(key, CONTEXT_GROUP)
-        self.boot.context_keys.clear()
+                def drain_focus():
+                    result = api.event_loop_destroy(FOCUS_LOOP)
+                    if result.status != api.ResStatus.eOk:
+                        raise RuntimeError(result.msg)
+                    focus.loop_started = False
+                attempt("专注回调", drain_focus)
+            with caller("@Control"):
+                attempt("保存专注", self.focus.pause)
+        if final_shutdown:
+            # No producers remain. This waits for queued requests AND callbacks,
+            # while the observer and all business services still exist.
+            attempt("框架异步池", lambda: api.server().executor.shutdown(wait=True))
+        live = []
+        for service in (self.update_service, self.daily_service, self.learning_service, self.station, focus):
+            if service is None:
+                continue
+            for name in ('worker', 'clock', 'thread'):
+                thread = getattr(service, name, None)
+                if isinstance(thread, threading.Thread) and thread.is_alive(): live.append(name)
+            workers = getattr(service, 'workers', {})
+            if any(thread.is_alive() for thread, _ in workers.values()): live.append('workers')
+        if self.learning_service and any(t.is_alive() for t, _ in self.learning_service.tutor.workers.values()):
+            live.append('tutor')
+        if self.graph and self.graph.viewer:
+            live.append('graph-http')
+        if live:
+            raise RuntimeError("星序仍有运行入口，保留服务与观测器以便重试清理："+", ".join(live)+"；"+"; ".join(errors))
+        if self.graph:
+            # Refuse to detach if an unowned synchronous request is still in flight.
+            self.graph.detach()
+        for name in reversed(self.boot.registered[:]):
+            def remove(name=name):
+                try:
+                    if api.del_service(name) != 0:
+                        raise RuntimeError(name)
+                finally:
+                    # Framework unregisters before deinit; a deinit exception must
+                    # not make subsequent cleanup retry a now-absent service.
+                    if name not in api.server().service_names():
+                        self.boot.registered.remove(name)
+            attempt("服务注销失败", remove)
+        for key in reversed(self.boot.context_keys[:]):
+            def destroy(key=key):
+                response = api.context_destroy(key, CONTEXT_GROUP)
+                if response.status != api.ResStatus.eOk:
+                    raise RuntimeError(response.msg)
+                self.boot.context_keys.remove(key)
+            attempt("Context 清理失败", destroy)
+        if self.boot.registered or self.boot.context_keys:
+            raise RuntimeError("星序清理待重试："+"; ".join(errors))
         if apply_update and self.update_service and not errors:
-            try:self.update_service.activate()
-            except (OSError,ValueError) as exc:errors.append('更新尚未切换：'+str(exc))
+            attempt("更新尚未切换", self.update_service.activate)
         if self._data_lock:
             self._data_lock.close()
             self._data_lock = None
         self.started = False
+        self.station = None
         with self._lock:
             type(self)._active = False
         if errors:
-            raise RuntimeError("Momo 退出清理失败：" + "; ".join(errors))
+            raise RuntimeError("星序退出清理失败："+"; ".join(errors))
 
     def __enter__(self): return self.start()
     def __exit__(self, exc_type, exc, tb): self.close()

@@ -1,0 +1,57 @@
+{
+  "version": "0.9.5",
+  "platform": "linux-x86_64",
+  "minimum_glibc": "2.35",
+  "source_commit": "31bd69d319c2d78aa1303825be28f77424316ae0",
+  "built_at": "2026-10-31T10:36:38.061852+00:00",
+  "python": "3.12.16",
+  "pyinstaller": "6.22.3",
+  "runtime_packages": {
+    "PyQt5": "5.15.11",
+    "PyQt5-Qt5": "5.15.19",
+    "PyQt5-sip": "12.20.0",
+    "readerwriterlock": "1.0.9",
+    "typing_extensions": "4.16.0",
+    "starlette": "0.52.1",
+    "anyio": "4.15.1",
+    "idna": "3.20"
+  },
+  "artifacts": [
+    {
+      "file": "orbit-0.9.5-linux-x86_64.tar.gz",
+      "bytes": 56668385,
+      "sha256": "5ac15f7c7aaa3ecd2f49973030848d31b0e6c3027be6a65a072f202079391c40"
+    },
+    {
+      "file": "sevenova-orbit_0.9.5_amd64.deb",
+      "bytes": 60428052,
+      "sha256": "9ecaa81be612f0aedc0198958891a677ca8bc11ebb5eaca117a00aa5f5350205"
+    }
+  ],
+  "verification": [
+    "frozen --version",
+    "frozen --self-test",
+    "offscreen startup/screenshot",
+    "extracted portable --self-test",
+    "extracted Debian --self-test",
+    "Debian-style command symlink --self-test"
+  ],
+  "user_data_included": false,
+  "codex_credentials_included": false,
+  "source_dirty": true,
+  "source_file_sha256": {
+    "window_activation.py": "b47e91aeb3ccc254bd6e1cab5a17941ab0681b25f35e746009fa2941644707d5",
+    "tests/test_window_activation.py": "e02ffc5e21c4a4bf9e351c024b9bdc94b48ff998a68546e466d572bda5c6623b",
+    "main.py": "8a191bafc030c0b3ebc6f33f5025d8cc3bf7ca2e4f5d3100314a45ad8f1aea58",
+    "runtime.py": "e71e2ce1866175281ef64bf9bec9ae387e85cdeaab3ebdc518850cdcd83dc75e",
+    "station_backend.py": "c5fb029773a00ab4462f9b72b53082a807ee6633e2646fb661d379c5b5678e0c",
+    ".gitignore": "13838ee0a0f0b545de7db7ca753def3ec1bdc6886a8c310015220972509c0298",
+    "art.py": "5fce2c36b90653b47b576da955d3593c1df573f224d7ea3e46b7969ab5ee4eb5",
+    "assets/orbit.svg": "378ae6ca4e6e93a2f5a2eb43ea47d00c9344eddfb211ef444d5957c2ea74b09c",
+    "assets/learning/zhixing.json": "c3d692c6f2450f77f1227c50c16dd8a5db7b36d635486057f30717093957f98e",
+    "docs/BRAND_THEME.md": "3bf2455a23578514b0f388fe864c26c29ccc48fbf1f3a3fad886551c20e4cb55",
+    "release/README.md": "d70a48a669e6997cbb4c56bae89359bcc142bee06ecca15daa3aa4146b258045",
+    "typedefine/TypeDefine.py": "38e8fa001b443c7eeb39718fc55a5d42d696899fe80715efa3ef7282d0d1724e"
+  },
+  "publication": "local build; not published to GitHub"
+}

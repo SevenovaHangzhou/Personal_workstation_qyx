@@ -3,6 +3,7 @@ import math
 import threading
 import time
 from framework import api
+from observation import entry
 from msgs.YomkMsgs import TaskId, FocusStart, FocusMinutes, FocusCredit
 from services.base import MomoService, ServiceRequestError, ok, require, request_data
 from typedefine.TypeDefine import CONTEXT_GROUP, CTX_FOCUS, FOCUS_LOOP
@@ -189,10 +190,11 @@ class FocusService(MomoService):
         self.publish()
         return ok(self.state())
 
+    @entry("@FocusEventLoop")
     def clock_event(self, pkg):
         try:
             # Go through the installed handler for locking, errors and liveness.
-            return self.functions["/tick"](pkg)
+            return api.request("/FocusService/tick", pkg)
         finally:
             self.tick_pending.clear()
 
@@ -205,6 +207,7 @@ class FocusService(MomoService):
             self.thread = threading.Thread(target=self.pulse, name="momo-focus-clock", daemon=True)
             self.thread.start()
 
+    @entry("@FocusClock")
     def pulse(self):
         while not self.stop_event.wait(0.25):
             if not self.tick_pending.is_set():

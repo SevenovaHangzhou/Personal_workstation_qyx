@@ -1,5 +1,6 @@
 """Code-driven nightly pipeline with durable retry and immutable report inputs."""
 import json
+from observation import job, span
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -88,8 +89,8 @@ class DailyEngine:
             return issue
         if pending:
             parent = self.synchronize(task['parent_id'], config, cancel, stack) if task.get('parent_id') else None
-            if parent and parent['team_id'] != issue['team_id']:
-                raise ValueError('父子 issue 团队不同，请先在 Linear 中确认归属后重试')
+            # Linear supports parent/sub-issues across teams in one workspace.
+            # Reconcile only parentId; preserve the child's team and identifier.
             key = 'parent:'+task['id']+':'+pending['revision']
             operation = self.store.operation(key, {'issue_id':issue['id'], 'parent_id':parent['id'] if parent else None})
             if cancel.is_set(): raise InterruptedError('日报已停止')
@@ -107,6 +108,7 @@ class DailyEngine:
         self._resolved[task['id']] = issue
         return issue
 
+    @job("@DailyWorker", "/DailyService", "/run-day")
     def run(self, day, config, cancel):
         end = cutoff(day); start = end-timedelta(days=1)
         self.sync_cutoff = end
@@ -160,7 +162,7 @@ class DailyEngine:
                 try:
                     if task['id'] not in issue_cache: raise ValueError('等待绑定真实 issue 后创建每日分支')
                     root = git(repo['location'], 'rev-parse','--show-toplevel').decode().strip()
-                    with self.station.reserve_repository(root):
+                    with span("/DailyService", "@EmbeddedStation", "/reserve-repository"), self.station.reserve_repository(root):
                         content['git'][key] = daily_snapshot(root, self.store.folder/'git', day, self.tasks.get(task['id']), cancel)
                 except Exception as exc:
                     if isinstance(exc, InterruptedError): raise
@@ -192,7 +194,7 @@ class DailyEngine:
                 continue
             if scan_errors or any(t not in content['summaries'] for t in threads):
                 continue  # Never publish a partial transcript as a complete report.
-            body = '## Momo 日报 · '+day+'\n\n周期：'+content['start']+' → '+content['end']+'\n\n'
+            body = '## 星序日报 · '+day+'\n\n周期：'+content['start']+' → '+content['end']+'\n\n'
             body += '本地任务状态：'+STATUSES[taskmap[task_id]['status']]+'（不自动更改 Linear 状态）\n\n'
             body += '\n\n'.join(content['summaries'][t]+'\n\n来源：codex://threads/'+t for t in threads)
             opkey = 'comment:'+day+':'+task_id
@@ -205,7 +207,7 @@ class DailyEngine:
                     self.store.complete(opkey, result)
             except Exception as exc:
                 errors.append(taskmap[task_id]['title']+'：日报评论等待重试；'+str(exc))
-        lines = ['# Momo 日报 · '+day,'', '周期：'+content['start']+' → '+content['end'],
+        lines = ['# 星序日报 · '+day,'', '周期：'+content['start']+' → '+content['end'],
                  '22:00 后的记录进入次日日报。任务状态为本地快照，模型摘要不自动判定完成。','']
         for thread, messages in content['groups'].items():
             ids = content['mapping'].get(thread, [])

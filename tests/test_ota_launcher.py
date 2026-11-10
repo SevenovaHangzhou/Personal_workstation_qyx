@@ -38,6 +38,17 @@ class LauncherTests(unittest.TestCase):
         self.candidate('0.9.0','echo OLD');result=self.launch()
         self.assertEqual(result.returncode,0,result.stderr);self.assertIn('BASE',result.stdout);self.assertNotIn('OLD',result.stdout)
 
+    def test_default_branded_and_legacy_data_locations_find_updates(self):
+        for label,relative in [('branded','Sevenova/Orbit'),('legacy','MomoLocal/Momo')]:
+            with self.subTest(location=label):
+                data_home=self.root/label
+                self.updates=data_home/relative/'updates'
+                self.candidate('0.10.0','echo UPDATED')
+                env=dict(os.environ,HOME=str(self.root),XDG_DATA_HOME=str(data_home),XDG_STATE_HOME=str(self.root/'state'))
+                env.pop('ORBIT_SKIP_OTA',None);env.pop('ORBIT_OTA_HEALTH_FILE',None)
+                result=subprocess.run([str(self.base/'orbit'),'--version'],capture_output=True,text=True,timeout=5,env=env,cwd=self.root)
+                self.assertEqual(result.returncode,0,result.stderr);self.assertEqual(result.stdout.strip(),'UPDATED')
+
     def test_debian_style_symlink_resolves_base_and_updated_application(self):
         entry=self.root/'bin/orbit';entry.parent.mkdir();entry.symlink_to(self.base/'orbit')
         result=self.launch(entry=entry);self.assertEqual(result.returncode,0,result.stderr);self.assertIn('BASE',result.stdout)

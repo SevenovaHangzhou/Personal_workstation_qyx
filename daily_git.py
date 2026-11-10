@@ -20,7 +20,7 @@ def git(root, *args):
     env = {k: v for k,v in system_environment().items() if not k.startswith('GIT_')}
     env['GIT_OPTIONAL_LOCKS'] = '0'
     try:
-        result = subprocess.run(['git', '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null',
+        result = subprocess.run(['git', '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath='+os.devnull,
                                  '-C', str(root), *args], env=env, capture_output=True, timeout=30)
     except (OSError, subprocess.TimeoutExpired):
         raise SnapshotError('Git 操作失败或超时') from None

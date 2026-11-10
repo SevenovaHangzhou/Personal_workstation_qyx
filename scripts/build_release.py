@@ -95,7 +95,7 @@ def main():
         f'星序 ORBIT {release_version}\n\n运行 ./orbit；无需安装 Python。\n'
         '需要 Linux x86_64、glibc 2.35+ 和桌面图形环境。\n'
         'Codex CLI、Git 及其配置使用系统现有安装，登录不包含在包中。\n'
-        '数据沿用 ~/.local/share/MomoLocal/Momo，关闭主窗口会驻留托盘。\n'
+        '默认数据 ~/.local/share/Sevenova/Orbit；首次启动自动迁移旧数据并兼容旧路径。关闭主窗口会驻留托盘。\n'
         '启动日志：${XDG_STATE_HOME:-~/.local/state}/orbit/startup.log\n'
         '退出：托盘菜单“停止执行并退出”。\n'
         '离线自检：QT_QPA_PLATFORM=offscreen ./orbit --self-test\n')
@@ -108,12 +108,13 @@ def main():
         probe_env['HOME'] = temporary
         probe_env['XDG_DATA_HOME'] = str(Path(temporary)/'data')
         probe_env['XDG_STATE_HOME'] = str(Path(temporary)/'state')
-        for switch in ('--version', '--self-test'):
-            result = subprocess.run([str(bundle/'orbit'), switch], cwd=temporary, env=probe_env,
+        for switches, label in [(['--version'], 'version'), (['--self-test'], 'self-test'),
+                                (['--self-test', '--graph', '--graph-port', '0'], 'graph-self-test')]:
+            result = subprocess.run([str(bundle/'orbit'), *switches], cwd=temporary, env=probe_env,
                                     capture_output=True, text=True, timeout=60)
-            (work/(switch[2:]+'.log')).write_text(result.stdout+result.stderr)
+            (work/(label+'.log')).write_text(result.stdout+result.stderr)
             result.check_returncode()
-            if switch == '--version' and release_version not in result.stdout:
+            if label == 'version' and release_version not in result.stdout:
                 raise RuntimeError('Frozen version check failed')
         run([str(bundle/'orbit-bin'), '--data-dir', str(Path(temporary)/'screenshot-data'),
              '--screenshot', str(work/'application.png')], cwd=temporary, env=probe_env,
@@ -151,6 +152,9 @@ def main():
             result = run([str(binary), '--self-test'], cwd=temporary, env=probe_env,
                          capture_output=True, text=True, timeout=60)
             (work/(name+'-self-test.log')).write_text(result.stdout+result.stderr)
+            result = run([str(binary), '--self-test', '--graph', '--graph-port', '0'], cwd=temporary,
+                         env=probe_env, capture_output=True, text=True, timeout=60)
+            (work/(name+'-graph-self-test.log')).write_text(result.stdout+result.stderr)
         # Reproduce /usr/bin/orbit without installing into the host system.
         entry = extracted/'command-bin/orbit'; entry.parent.mkdir()
         entry.symlink_to(extracted/'debian/opt/sevenova-orbit/orbit')
@@ -165,7 +169,8 @@ def main():
                     runtime_packages=versions, artifacts=artifacts,
                     verification=['frozen --version', 'frozen --self-test', 'offscreen startup/screenshot',
                                   'extracted portable --self-test', 'extracted Debian --self-test',
-                                  'Debian-style command symlink --self-test'],
+                                  'Debian-style command symlink --self-test',
+                                  'frozen and extracted portable/Debian --self-test --graph (assets + 14 services)'],
                     user_data_included=False, codex_credentials_included=False)
     (output/'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2)+'\n')
     (output/'SHA256SUMS').write_text(''.join(f'{row["sha256"]}  {row["file"]}\n' for row in artifacts))

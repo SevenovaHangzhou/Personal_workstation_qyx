@@ -1,4 +1,5 @@
 """Native, cancellable metadata inventory. There are deliberately no delete APIs."""
+from observation import entry
 import threading
 from PyQt5.QtCore import QThread,Qt,QUrl
 from PyQt5.QtGui import QDesktopServices
@@ -10,6 +11,7 @@ from storage_usage import scan_usage,format_bytes
 class UsageWorker(QThread):
     def __init__(self,root,parent,operation=None):
         super().__init__(parent);self.root=root;self.stop=threading.Event();self.result=None;self.error='';self.operation=operation
+    @entry("@UIWorker")
     def run(self):
         try:self.result=self.operation(self.stop) if self.operation else scan_usage(self.root,self.stop.is_set)
         except (OSError,ValueError) as exc:self.error=str(exc)

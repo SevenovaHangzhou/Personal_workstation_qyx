@@ -2,7 +2,7 @@
 
 - [使用说明](USAGE.md)
 
-- [架构与服务](ARCHITECTURE.md)
+- [架构与服务](ARCHITECTURE.md)、[YomkGraph 运行图谱](YOMKGRAPH.md)
 - [主题与交互](DESIGN.md)、[品牌](BRAND_THEME.md)
 - [任务规划](TASK_PLANNING.md)、[日报与 Git 留存](DAILY_PROGRESS_PLAN.md)
 - [学习课程](LEARNING_COURSES.md)、[工作站融合](WORKSTATION_INTEGRATION.md)

@@ -1,5 +1,6 @@
 """Yomk-owned course catalog, explicit task bindings, jobs and private answers."""
 import copy
+from observation import job
 import json
 import os
 import threading
@@ -11,6 +12,8 @@ from services.base import MomoService, ok, require
 from learning_content import (BUILTIN_COURSE_ID, SUBJECT_MODE, combine_legacy_course,
                               legacy_catalog, ordered_lessons, validate_package)
 from learning_runner import CourseRunner, ROOT
+from learning_quality import TEACHING_STANDARD, teaching_audit
+from learning_progress import advance_progress, now_text
 from learning_tutor import LearningTutor, course_context
 
 ACTIVE = {'queued','running'}
@@ -49,7 +52,7 @@ class LearningService(MomoService):
             self.courses[course['id']] = course
         for job in self.state['jobs'].values():
             if job['status'] in ACTIVE:
-                job.update(status='interrupted',message='上次应用退出，生成已中断；日志和草稿保留，可确认输入后重新创建。')
+                job.update(status='interrupted',finished_at=now_text(),message='上次应用退出，生成已中断；日志和草稿保留，可确认输入后重新创建。')
         self._save()
         self.tutor = LearningTutor(self.folder/'tutor', atomic_json)
 
@@ -65,7 +68,7 @@ class LearningService(MomoService):
             self.state = before; raise
 
     def init(self):
-        for endpoint in ('revision','snapshot','catalog','bind','start','cancel','course','answer',
+        for endpoint in ('revision','snapshot','catalog','bind','start','regenerate','save_feedback','cancel','course','answer',
                          'tutor_snapshot','tutor_ask','tutor_cancel','study_state','save_study','retention_artifacts'):
             self.install('/'+endpoint,getattr(self,endpoint),'dict','学习课程、后台生成与作答：'+endpoint)
         self.alive = True
@@ -85,6 +88,7 @@ class LearningService(MomoService):
         course_id = self.state['bindings'].get(task_id)
         course = self.courses.get(course_id)
         return ok({'revision':self.state['revision'],'bindings':self.state['bindings'],
+            'feedback_draft':self.state.get('feedback_drafts',{}).get(task_id,{}).get(course_id,''),
             'course':{k:course[k] for k in ('id','title','origin')} if course else None,
             'jobs':jobs,'busy':any(j['status'] in ACTIVE for j in jobs),
             'concurrency':self.state['concurrency'],'folder':str(self.folder)})
@@ -108,6 +112,29 @@ class LearningService(MomoService):
 
     def start(self, pkg):
         require(isinstance(pkg,dict) and set(pkg)=={'task_id','subject','concurrency'}, '无效建课输入')
+        return self._start(pkg)
+
+    def regenerate(self, pkg):
+        require(isinstance(pkg,dict) and set(pkg)=={'task_id','course_id','feedback','concurrency'}, '无效课程改进输入')
+        self._task(pkg['task_id'])
+        require(isinstance(pkg['course_id'],str) and pkg['course_id'] in self.courses, '原课程不存在')
+        require(self.state['bindings'].get(pkg['task_id'])==pkg['course_id'], '当前绑定已改变，请刷新后再改进课程')
+        require(isinstance(pkg['feedback'],str) and 1<=len(pkg['feedback'].strip())<=6000, '请填写 1–6000 字的改进意见')
+        course=self.courses[pkg['course_id']]
+        subject=course['package']['input'].get('subject') or course['title']
+        return self._start(dict(task_id=pkg['task_id'],subject=subject,concurrency=pkg['concurrency']),
+                           course, pkg['feedback'].strip())
+
+    def save_feedback(self,pkg):
+        require(isinstance(pkg,dict) and set(pkg)=={'task_id','course_id','feedback'}, '无效改进意见草稿')
+        self._task(pkg['task_id'])
+        require(isinstance(pkg['course_id'],str) and pkg['course_id'] in self.courses, '课程不存在')
+        require(isinstance(pkg['feedback'],str) and len(pkg['feedback'])<=6000, '改进意见最多 6000 字')
+        def write():
+            self.state.setdefault('feedback_drafts',{}).setdefault(pkg['task_id'],{})[pkg['course_id']]=pkg['feedback']
+        self._mutate(write); return ok()
+
+    def _start(self, pkg, base_course=None, feedback=''):
         task = self._task(pkg['task_id'])
         require(not self.stopping, '学习服务正在停止')
         require(not any(j['input']['task_id']==task['id'] and j['status'] in ACTIVE for j in self.state['jobs'].values()), '此任务已有课程正在生成')
@@ -116,11 +143,21 @@ class LearningService(MomoService):
         identifier = str(uuid.uuid4())
         inputs = {'mode':SUBJECT_MODE,'subject':pkg['subject'].strip()}
         inputs.update(task_id=task['id'],title=task['title'],description=task['description'],note=task['note'],input_version=identifier)
+        if base_course:
+            inputs.update(base_course_id=base_course['id'],feedback=feedback)
         job = {'id':identifier,'input':inputs,'status':'queued','message':'等待后台生成课程',
                'created_at':datetime.now(timezone.utc).isoformat(),'thread_id':'',
+               'teaching_standard':TEACHING_STANDARD,
                'binding_before':self.state['bindings'].get(task['id']), 'binding_version':self.state['binding_versions'].get(task['id'],0), 'course_id':None}
+        if base_course:
+            # Snapshot only teaching material. Answers and private tutor history
+            # must never become regeneration context. Save before enqueuing.
+            atomic_json(self.folder/'generations'/identifier/'previous-course.json',
+                        {key:base_course[key] for key in ('id','title','package')})
         def write():
             self.state['concurrency']=pkg['concurrency']; self.state['jobs'][identifier]=job
+            if base_course:
+                self.state.setdefault('feedback_drafts',{}).setdefault(task['id'],{})[base_course['id']]=feedback
         self._mutate(write); self._pump()
         return ok(self.state['jobs'][identifier])
 
@@ -129,20 +166,23 @@ class LearningService(MomoService):
         for job in self.state['jobs'].values():
             if len(self.workers)>=self.state['concurrency']: break
             if job['status']!='queued': continue
-            job.update(status='running',message='正在启动系统 Codex CLI'); self._save()
+            job.update(status='running',started_at=now_text(),message='正在启动系统 Codex CLI')
+            advance_progress(job,'starting'); self._save()
             cancel = threading.Event()
             thread = threading.Thread(target=self._run,args=(copy.deepcopy(job),cancel),name='orbit-course-'+job['id'][:8],daemon=False)
             self.workers[job['id']] = (thread,cancel)
             try: thread.start()
             except Exception:
-                self.workers.pop(job['id'],None); job.update(status='failed',message='后台线程未启动'); self._save(); raise
+                self.workers.pop(job['id'],None); job.update(status='failed',finished_at=now_text(),message='后台线程未启动'); self._save(); raise
 
+    @job("@CourseWorker", "/LearningService", "/generate-course")
     def _run(self, job, cancel):
         identifier = job['id']; folder = self.folder/'generations'/identifier
-        def progress(message,thread_id=''):
+        def progress(message,thread_id='',stage=None):
             with self.lock:
                 current = self.state['jobs'][identifier]
                 current['message'] = message[:500]
+                if stage: advance_progress(current,stage)
                 if thread_id and not current['thread_id']:
                     # A generated chat is bound to its confirmed originating task only.
                     try:
@@ -161,13 +201,18 @@ class LearningService(MomoService):
             if result['status']=='needs_input':
                 require(bool(result['message'].strip()), 'Codex 未给出需补充的信息')
                 with self.lock:
-                    self.state['jobs'][identifier].update(status='needs_input',message=result['message']); self._save()
+                    self.state['jobs'][identifier].update(status='needs_input',finished_at=now_text(),message=result['message']); self._save()
                 return
-            progress('正在检查知识覆盖、先修关系与学习路径')
+            progress('正在检查知识覆盖、先修关系与学习路径',stage='validate')
             package = json.loads(result['course_json'])
             atomic_json(folder/'course-package.json',package)
             validate_package(package,job)
             package['lessons'] = ordered_lessons(package)
+            audit=teaching_audit(package,required=job.get('teaching_standard')==TEACHING_STANDARD)
+            atomic_json(folder/'teaching-audit.json',audit)
+            if audit['errors']:
+                raise ValueError('课程教学检查未通过，原课程保留：'+'；'.join(audit['errors'][:8]))
+            progress('正在保存知识库、课程与学习路径',stage='save')
             if package['input'].get('mode') == SUBJECT_MODE:
                 atomic_json(folder/'knowledge-base.json', {key:package[key] for key in
                     ('input','search_queries','sources','coverage','knowledge_units','unresolved')})
@@ -177,7 +222,8 @@ class LearningService(MomoService):
                                for lesson in package['lessons']]})
             course_id = 'generated:'+identifier
             course = {'id':course_id,'title':job['input'].get('subject') or job['input']['title'],'origin':'此任务生成 · 待审阅',
-                      'package':package,'review':result['review']}
+                      'package':package,'review':result['review'],'teaching_audit':audit,
+                      'supersedes':job['input'].get('base_course_id')}
             with self.lock:
                 if cancel.is_set(): raise InterruptedError('已停止课程生成，草稿已保留')
                 atomic_json(self.folder/'courses'/(identifier+'.json'),course)
@@ -190,11 +236,11 @@ class LearningService(MomoService):
                     self.state['bindings'][task['id']] = course_id
                     message = '课程草稿已生成并绑定，请阅读并核查教学内容'
                 else: message = '课程草稿已保留；任务或绑定发生变化，请明确选择后绑定'
-                self.state['jobs'][identifier].update(status='review',message=message,course_id=course_id)
+                self.state['jobs'][identifier].update(status='review',finished_at=now_text(),message=message,course_id=course_id)
                 self._save()
         except Exception as exc:
             with self.lock:
-                self.state['jobs'][identifier].update(status='cancelled' if isinstance(exc,InterruptedError) else 'failed',message=str(exc)[:1600])
+                self.state['jobs'][identifier].update(status='cancelled' if isinstance(exc,InterruptedError) else 'failed',finished_at=now_text(),message=str(exc)[:1600])
                 self._save()
         finally:
             with self.lock:
@@ -205,7 +251,7 @@ class LearningService(MomoService):
         require(isinstance(pkg,dict) and isinstance(pkg.get('job_id'),str), '无效生成记录')
         job = self.state['jobs'].get(pkg['job_id']); require(job, '没有找到生成记录')
         if job['status']=='queued':
-            self._mutate(lambda:job.update(status='cancelled',message='已取消排队'))
+            self._mutate(lambda:job.update(status='cancelled',finished_at=now_text(),message='已取消排队'))
         elif job['id'] in self.workers:
             self.workers[job['id']][1].set()
         return ok()

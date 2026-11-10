@@ -1,4 +1,5 @@
 """Separate native dialogs for creating a chat and binding existing chats."""
+from observation import entry
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +20,7 @@ class HistoryWorker(QThread):
         self.result = None
         self.error = ""
 
+    @entry("@UIWorker")
     def run(self):
         try:
             self.result = self.operation(self.cancel_event)

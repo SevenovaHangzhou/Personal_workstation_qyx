@@ -1,0 +1,18 @@
+{
+  "name": "YomkGraph",
+  "version": "0.1.0",
+  "source": "/home/zlz/Desktop/ing_obj/frame/YomkGraph",
+  "framework_target": "existing ORBIT YomkServerPy 1.5.6; no upgrade",
+  "copied_files_sha256": {
+    "yomk_graph/__init__.py": "bf4beea1828d5b758630a352c571e853b00d12860f125a5339ea05421a9f27ea",
+    "yomk_graph/__main__.py": "18f7b3e7abb18b70fba28bef7ea1dd64e1932543d63033ebaf67989eefcd3b7d",
+    "yomk_graph/collector.py": "654851b37f781f5c9cf41605fe15c286dfd383069687bc65dc2597e3a9631d93",
+    "yomk_graph/demo.py": "ca87acfb72d8a2cb6de5770dfb98ce6372d7d7d76b68ff06b90d43c68e3f5454",
+    "yomk_graph/python.py": "a9eba3a6f56221ce71a94ea08034cc413fc0670d64351aed48c12f75f5fc2d80",
+    "yomk_graph/server.py": "4403741cf34bdd6ee4ca806673b9b6414885c4e87de0987d9aedfeb2f94a2377",
+    "yomk_graph/web/app.css": "ea59fe90a0e5c843f44195743a6cf62bdba05b29af9066abfa8cd6c92179f47c",
+    "yomk_graph/web/app.js": "d1b09f53706033094b7a53121c9a8ec29052b4538aceaa68c2729aafb64d629a",
+    "yomk_graph/web/index.html": "f9b6f703f19213d2a781fd5f9e4c0c882db28896c78d20d4930a48a81f75aabf"
+  },
+  "note": "Local fixed source copy; upstream directory has no standalone LICENSE file. No public release is performed by this integration."
+}

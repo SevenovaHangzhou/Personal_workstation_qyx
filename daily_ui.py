@@ -1,4 +1,5 @@
 """Native daily log and Linear destination dialogs."""
+from observation import entry
 from pathlib import Path
 from PyQt5.QtCore import QThread, QTimer, Qt, QUrl
 from PyQt5.QtGui import QDesktopServices
@@ -9,6 +10,7 @@ from ui_helpers import box, label, button
 class ChoicesWorker(QThread):
     def __init__(self, client, team_id, owner):
         super().__init__(owner); self.client=client; self.team_id=team_id; self.result=None; self.error=''
+    @entry("@UIWorker")
     def run(self):
         try: self.result=self.client.choices(self.team_id)
         except Exception as exc: self.error=str(exc)

@@ -86,12 +86,12 @@ class EmbeddedStation:
         self.folder = Path(folder).resolve()
         self.folder.mkdir(parents=True, exist_ok=True)
         self._lock_file = (self.folder / "desktop.lock").open("a+")
-        import fcntl
+        from platform_support import lock_file
         try:
-            fcntl.flock(self._lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lock_file(self._lock_file)
         except OSError:
             self._lock_file.close()
-            raise RuntimeError("该 Momo 数据目录已在运行，请打开已有窗口")
+            raise RuntimeError("该星序数据目录已在运行，请打开已有窗口")
         self.lock = threading.RLock()
         self.tasks = task_client
         self.executor = executor

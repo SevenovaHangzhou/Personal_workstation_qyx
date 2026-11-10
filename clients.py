@@ -1,6 +1,7 @@
 """UI-facing request adapters. Returned task dictionaries are snapshots."""
 from pathlib import Path
 from framework import api
+from observation import client_origin
 from msgs.YomkMsgs import (TaskId, CreateTask, UpdateTask, TaskStatus, StepInput,
                           ChildTasks, TaskIssue, StepState, BindingInput, BindingIndex, FocusStart, FocusMinutes)
 from msgs.YomkMsgs import GitInput, RepositoryIndex, LinearCredentials, LinearPull, LinearImport
@@ -8,7 +9,8 @@ from msgs.YomkMsgs import CodexRecommend, CodexBind, CodexCreate, ApplyTaskPlan,
 
 
 def call(url, payload=None):
-    response = api.request(url, payload)
+    with client_origin():
+        response = api.request(url, payload)
     if response.status == api.ResStatus.eOk:
         return response.data
     if response.status == api.ResStatus.eInvalid:
@@ -111,6 +113,11 @@ class LearningClient:
     def bind(self, task_id, course_id): return call('/LearningService/bind', {'task_id':task_id,'course_id':course_id})
     def start(self, task_id, subject, concurrency=1):
         return call('/LearningService/start', dict(task_id=task_id,subject=subject,concurrency=concurrency))
+    def regenerate(self, task_id, course_id, feedback, concurrency=1):
+        return call('/LearningService/regenerate', dict(task_id=task_id,course_id=course_id,
+                    feedback=feedback,concurrency=concurrency))
+    def save_feedback(self, task_id, course_id, feedback):
+        return call('/LearningService/save_feedback',dict(task_id=task_id,course_id=course_id,feedback=feedback))
     def cancel(self, job_id): return call('/LearningService/cancel', {'job_id':job_id})
     def course(self, course_id, task_id): return call('/LearningService/course', {'course_id':course_id,'task_id':task_id})
     def answer(self, **answer): return call('/LearningService/answer', answer)

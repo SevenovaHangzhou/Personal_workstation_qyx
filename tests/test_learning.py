@@ -15,6 +15,7 @@ from model import make_task
 from learning_content import (BUILTIN_COURSE_ID, SUBJECT_MODE, combine_legacy_course,
                               legacy_catalog, ordered_lessons, validate_package)
 from learning_runner import CourseRunner, ROOT
+from learning_quality import TEACHING_STANDARD
 from learning_ui import LearningDialog, CourseReader
 from main import Momo
 from test_ui import APP
@@ -33,6 +34,16 @@ def package(job):
     p.pop('legacy_original',None);p['generation_id']=job['id'];p['input']=copy.deepcopy(job['input']);p['input']['topic_id']='test'
     p['search_queries']=['fixture 本地知识检索']
     for unit in p['knowledge_units']:unit['claims']=[{'statement':'测试结论','conditions':'测试条件','location':'本地测试资料','source_ids':unit['source_ids']}]
+    if job.get('teaching_standard')==TEACHING_STANDARD:
+        p['teaching_standard']=TEACHING_STANDARD
+        for lesson in p['lessons']:
+            lesson['teaching']={'question':'怎样根据条件得到结论？','bridge':'从已展示的简单案例增加一个条件。',
+                'takeaway':'每一步都须有理由，并能独立核对。','explanation_section_id':lesson['sections'][0]['id'],
+                'visual':{'required':False,'reason':'测试案例只检查教学组织，未声称迁移了原交互。'}}
+            lesson['sections'][0]['blocks'].append({'type':'worked_example','title':'完整测试案例',
+                'givens':'每项2字节，共3项，求总长。','steps':['先求每项占用：2字节。','累加3项：2+2+2=6字节。'],
+                'result':'总共6字节。','check':'按乘法3×2=6，单位仍是字节。'})
+            for index,q in enumerate(lesson['questions']):q['level']=['recognition','application','transfer'][index%3]
     return p
 
 
@@ -363,8 +374,11 @@ class RunnerTests(unittest.TestCase):
             # The fake CLI uses its process cwd like the real CLI -C option.
             original_popen=__import__('subprocess').Popen
             def launch(cmd,**kwargs):kwargs['cwd']=folder;return original_popen(cmd,**kwargs)
-            with patch('learning_runner.shutil.which',return_value=str(fake)),patch('learning_runner.subprocess.Popen',side_effect=launch),patch.dict(os.environ,{'CODEX_HOME':'/fixture/system-config','LINEAR_API_KEY':'fixture-secret'}):
+            with patch('learning_runner.find_codex',return_value=str(fake)),patch('learning_runner.subprocess.Popen',side_effect=launch),patch.dict(os.environ,{'CODEX_HOME':'/fixture/system-config','LINEAR_API_KEY':'fixture-secret'}):
                 result=CourseRunner().run({'id':'fixture','input':{'task_id':'task','mode':SUBJECT_MODE,'subject':'雅可比','input_version':'v2'}},folder,threading.Event(),lambda *values:events.append(values))
             self.assertEqual(result['status'],'needs_input');self.assertIn(('Codex 已开始检索和编写课程','fixture-chat'),events)
             prompt=(folder/'received.txt').read_text();self.assertIn('课程知识标准',prompt);self.assertIn('真实',prompt)
+            self.assertIn('orbit-teaching/v2',prompt);self.assertIn('worked_example',prompt)
+            self.assertIn('explanation_section_id',prompt);self.assertIn('transfer',prompt)
+            self.assertIn('diagram',prompt);self.assertIn('不询问用户掌握程度',prompt)
             env=json.loads((folder/'env.json').read_text());self.assertEqual(env['CODEX_HOME'],'/fixture/system-config');self.assertIsNone(env['LINEAR_API_KEY'])

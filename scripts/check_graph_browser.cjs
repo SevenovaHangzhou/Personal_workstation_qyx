@@ -1,0 +1,37 @@
+// Optional browser check: run against scripts/preview_graph.py, never --demo.
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright-core');
+const fs=require('fs'),path=require('path');
+const output=process.env.ORBIT_GRAPH_OUTPUT||path.resolve('build/graph-browser');
+fs.mkdirSync(output,{recursive:true});
+const url=process.env.ORBIT_GRAPH_URL||'http://127.0.0.1:18767';
+(async()=>{let browser;const checks=[],errors=[];try{
+ browser=await chromium.launch({executablePath:process.env.CHROME_BIN||'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
+ const page=await browser.newPage({viewport:{width:1680,height:1060}});page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(url);await page.waitForSelector('.node');
+ const snapshot=await page.evaluate(async()=>await (await fetch('/api/snapshot')).json());
+ const registered=snapshot.services.filter(s=>s.registered),business=registered.filter(s=>!s.builtin),base=registered.filter(s=>s.builtin);
+ if(registered.length!==14||business.length!==9||base.length!==5||snapshot.demo)throw Error('Not live ORBIT inventory');
+ if(!snapshot.project.includes('星序')||snapshot.version!=='1.5.6')throw Error('Wrong project/framework');
+ for(const group of ['任务与专注','外部集成','日报与学习','应用维护','框架基础服务'])if(!registered.some(s=>s.module===group))throw Error('Missing group '+group);
+ checks.push('real ORBIT 9 business and 5 builtin services with all groups');
+ const names=Object.fromEntries(snapshot.services.map(s=>[s.id,s.name]));
+ if(!snapshot.edges.some(e=>e.evidence==='observed'&&names[e.source]==='@FocusEventLoop'&&names[e.target]==='/FocusService'))throw Error('Missing callback evidence');
+ if(!snapshot.edges.some(e=>e.evidence==='observed'&&names[e.source]==='/FocusService'&&names[e.target]==='/TaskService'))throw Error('Missing nesting');
+ checks.push('live nested and EventLoop callback evidence');
+ const n=await page.locator('.node').count();if(n!==snapshot.services.length)throw Error('Default view hides nodes');
+ await page.locator('#search').fill('TaskService');
+ await page.locator('#builtins').uncheck();await page.locator('#all-modules').click();
+ if(await page.locator('.node').count()!==n)throw Error('Global overview did not restore all services');
+ checks.push('global overview resets filters');
+ await page.screenshot({path:path.join(output,'live-orbit.png'),fullPage:true});
+ await page.locator('#catalog-tab').click();if(!await page.locator('#catalog').isVisible())throw Error('Catalog hidden');
+ const text=await page.locator('#catalog').innerText();if(!text.includes('TaskService')||!text.includes('UpdateService'))throw Error('Missing idle services');
+ checks.push('function catalog includes inactive services');
+ await page.locator('#all-modules').click();await page.locator('.node').filter({has:page.locator('text=/^\\/YomkContext$/')}).click();
+ if(!(await page.locator('#inspect-content').innerText()).includes('资源元信息'))throw Error('Context resources missing');
+ checks.push('resource metadata inspector');
+ fs.writeFileSync(path.join(output,'live-snapshot.json'),JSON.stringify(snapshot,null,2));
+ if(errors.length)throw Error(errors.join('\n'));
+ const result={status:'PASS',url,registered_services:registered.length,business:business.length,builtin:base.length,visible_nodes:n,checks,errors};
+ fs.writeFileSync(path.join(output,'browser-result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
+}finally{if(browser)await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1});

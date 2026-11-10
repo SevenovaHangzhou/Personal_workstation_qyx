@@ -67,7 +67,7 @@ sys.exit(2)
     def test_cli_uses_requested_model_current_auth_ephemeral_and_readonly(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary); binary=self.fake(root); folder=root/'run'
-            with patch('learning_tutor.shutil.which',return_value=str(binary)), patch.dict(os.environ,{'CODEX_HOME':'/fixture/auth','LINEAR_API_KEY':'secret'}), patch('learning_tutor.subprocess.Popen',wraps=__import__('subprocess').Popen) as popen:
+            with patch('learning_tutor.find_codex',return_value=str(binary)), patch.dict(os.environ,{'CODEX_HOME':'/fixture/auth','LINEAR_API_KEY':'secret'}), patch('learning_tutor.subprocess.Popen',wraps=__import__('subprocess').Popen) as popen:
                 answer=TutorRunner().run(self.request(),folder,threading.Event(),lambda text:None)
             self.assertIn('当前章节',answer)
             args=json.loads((folder/'invocation.json').read_text())['args']
@@ -79,7 +79,7 @@ sys.exit(2)
     def test_model_error_is_returned_without_retry_or_model_substitution(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary); binary=self.fake(root,'failed')
-            with patch('learning_tutor.shutil.which',return_value=str(binary)), patch('learning_tutor.subprocess.Popen',wraps=__import__('subprocess').Popen) as popen:
+            with patch('learning_tutor.find_codex',return_value=str(binary)), patch('learning_tutor.subprocess.Popen',wraps=__import__('subprocess').Popen) as popen:
                 with self.assertRaisesRegex(RuntimeError,'unsupported model gpt-5.6-sol'):
                     TutorRunner().run(self.request(),root/'run',threading.Event(),lambda text:None)
             self.assertEqual(popen.call_count,1)
@@ -89,7 +89,7 @@ sys.exit(2)
             root=Path(temporary); binary=self.fake(root,'wait'); cancel=threading.Event()
             timer=threading.Timer(.3,cancel.set); timer.start()
             try:
-                with patch('learning_tutor.shutil.which',return_value=str(binary)):
+                with patch('learning_tutor.find_codex',return_value=str(binary)):
                     start=time.monotonic()
                     with self.assertRaises(InterruptedError):
                         TutorRunner().run(self.request(),root/'run',cancel,lambda text:None)

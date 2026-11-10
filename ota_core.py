@@ -9,6 +9,8 @@ import shutil
 import signal
 import subprocess
 import tarfile
+import zipfile
+from platform_support import process_options, stop_process
 import tempfile
 import time
 from urllib.error import HTTPError, URLError
@@ -112,6 +114,11 @@ class GitHubSource:
             raise ValueError('更新文件 SHA-256 或大小校验失败，已停止安装')
 
 
+def package_names(version):
+    if platform.system()=='Windows':return 'windows-manifest.json','WINDOWS-SHA256SUMS',f'orbit-{version}-windows-x86_64.zip'
+    return 'manifest.json','SHA256SUMS',f'orbit-{version}-linux-x86_64.tar.gz'
+
+
 def release_assets(release):
     if not isinstance(release,dict) or release.get('draft') is not False or release.get('prerelease') is not False:
         raise ValueError('只接受已正式发布的稳定版本')
@@ -121,14 +128,14 @@ def release_assets(release):
     assets = release.get('assets')
     if not isinstance(assets,list) or any(not isinstance(a,dict) for a in assets): raise ValueError('版本尚未提供有效更新安装包')
     names=[a.get('name') for a in assets if isinstance(a,dict)]
-    required=['manifest.json','SHA256SUMS',f'orbit-{version}-linux-x86_64.tar.gz']
+    required=package_names(version)
     result={}
     for name in required:
         if names.count(name)!=1: raise ValueError('新版本正在发布或缺少唯一的 '+name)
         row=next(a for a in assets if a.get('name')==name)
         if (type(row.get('id')) is not int or row['id']<=0 or row.get('url')!=API+'/releases/assets/'+str(row['id'])
                 or row.get('state')!='uploaded' or type(row.get('size')) is not int
-                or not 0<row['size']<=(MAX_PACKAGE if name.endswith('.gz') else 1024*1024)
+                or not 0<row['size']<=(MAX_PACKAGE if name.endswith(('.gz','.zip')) else 1024*1024)
                 or not isinstance(row.get('digest'),str) or not DIGEST.fullmatch(row['digest'])):
             raise ValueError('更新资产信息或 SHA-256 无效')
         result[name]=row
@@ -136,14 +143,17 @@ def release_assets(release):
 
 
 def validate_manifest(manifest, sums, version, asset):
-    if not isinstance(manifest,dict) or manifest.get('version')!=version or manifest.get('platform')!='linux-x86_64':
+    expected='windows-x86_64' if platform.system()=='Windows' else 'linux-x86_64'
+    if not isinstance(manifest,dict) or manifest.get('version')!=version or manifest.get('platform')!=expected:
         raise ValueError('更新清单的版本或平台不匹配')
-    if platform.system()!='Linux' or platform.machine()!='x86_64': raise ValueError('当前更新包仅支持 Linux x86_64')
-    minimum=manifest.get('minimum_glibc')
-    if not isinstance(minimum,str) or not re.fullmatch(r'[0-9]+\.[0-9]+',minimum): raise ValueError('更新包缺少有效的 glibc 要求')
-    local=platform.libc_ver()[1]
-    if not re.fullmatch(r'[0-9]+\.[0-9]+',local) or tuple(map(int,local.split('.')))<tuple(map(int,minimum.split('.'))):
-        raise ValueError('新版本需要 glibc '+minimum+' 或更高版本')
+    if platform.system()=='Windows':
+        if platform.machine().lower() not in ('amd64','x86_64') or manifest.get('minimum_windows')!='10':raise ValueError('更新包需要 Windows 10/11 x64')
+    else:
+        if platform.system()!='Linux' or platform.machine()!='x86_64':raise ValueError('当前更新包仅支持 Linux x86_64')
+        minimum=manifest.get('minimum_glibc')
+        if not isinstance(minimum,str) or not re.fullmatch(r'[0-9]+\.[0-9]+',minimum):raise ValueError('更新包缺少有效的 glibc 要求')
+        local=platform.libc_ver()[1]
+        if not re.fullmatch(r'[0-9]+\.[0-9]+',local) or tuple(map(int,local.split('.')))<tuple(map(int,minimum.split('.'))):raise ValueError('新版本需要 glibc '+minimum+' 或更高版本')
     rows=manifest.get('artifacts',[])
     if not isinstance(rows,list):raise ValueError('更新清单格式无效')
     matches=[r for r in rows if isinstance(r,dict) and r.get('file')==asset['name']]
@@ -154,6 +164,7 @@ def validate_manifest(manifest, sums, version, asset):
 
 
 def extract_package(archive_path, destination, event):
+    if platform.system()=='Windows':return extract_windows_package(archive_path,destination,event)
     if not hasattr(tarfile,'data_filter'): raise ValueError('源码 OTA 解包需要 Python 3.11.8+；发布应用已包含所需环境')
     with tarfile.open(archive_path) as archive:
         total=0; seen=set()
@@ -180,13 +191,14 @@ def extract_package(archive_path, destination, event):
 def probe(binary, version, folder, event):
     env=system_environment(); env.update(QT_QPA_PLATFORM='offscreen',PYINSTALLER_RESET_ENVIRONMENT='1',ORBIT_SKIP_OTA='1',
         HOME=str(folder),XDG_DATA_HOME=str(folder/'data'),XDG_STATE_HOME=str(folder/'state'))
+    if platform.system()=='Windows':env.update(LOCALAPPDATA=str(folder/'local'),APPDATA=str(folder/'roaming'),USERPROFILE=str(folder))
     for key in ('PYTHONPATH','PYTHONHOME','YOMK_PREFIX_PATH','CODEX_HOME'):
         env.pop(key,None)
     for switch in ('--version','--self-test'):
         output=folder/('probe'+switch+'.log')
         with output.open('wb') as stream:
             process=subprocess.Popen([str(binary),switch],env=env,cwd=folder,stdin=subprocess.DEVNULL,
-                                     stdout=stream,stderr=subprocess.STDOUT,start_new_session=True)
+                                     stdout=stream,stderr=subprocess.STDOUT,**process_options())
             deadline=time.monotonic()+45
             try:
                 while process.poll() is None:
@@ -197,9 +209,7 @@ def probe(binary, version, folder, event):
                 if process.returncode: raise ValueError('更新包隔离自检失败，保留当前版本')
             finally:
                 if process.poll() is None:
-                    os.killpg(process.pid,signal.SIGTERM)
-                    try:process.wait(timeout=2)
-                    except subprocess.TimeoutExpired:os.killpg(process.pid,signal.SIGKILL);process.wait(timeout=2)
+                    stop_process(process)
         text=output.read_text(encoding='utf-8',errors='replace')
         if switch=='--version' and not text.strip().endswith(' '+version): raise ValueError('更新包实际版本与发布版本不一致')
         if switch=='--self-test':
@@ -213,21 +223,21 @@ def probe(binary, version, folder, event):
 
 def stage_release(folder, release, event, progress, source=None):
     source=source or GitHubSource(); folder=Path(folder)
-    version,assets=release_assets(release); package=assets[f'orbit-{version}-linux-x86_64.tar.gz']
+    version,assets=release_assets(release); manifest_name,sums_name,package_name=package_names(version); package=assets[package_name]
     folder.mkdir(parents=True,exist_ok=True,mode=0o700)
     if shutil.disk_usage(folder).free<package['size']*6+100*1024**2: raise ValueError('磁盘空间不足，无法安全准备更新与回退版本')
     with tempfile.TemporaryDirectory(prefix='.incoming-',dir=folder) as temporary:
         temporary=Path(temporary)
-        for name in ('manifest.json','SHA256SUMS'):
+        for name in (manifest_name,sums_name):
             source.asset(assets[name],temporary/name,event,lambda *_:None)
-        validate_manifest(json.loads((temporary/'manifest.json').read_text()),(temporary/'SHA256SUMS').read_text(),version,package)
+        validate_manifest(json.loads((temporary/manifest_name).read_text()),(temporary/sums_name).read_text(),version,package)
         progress('downloading',0,package['size'])
-        archive=temporary/'package.tar.gz'
+        archive=temporary/('package.zip' if platform.system()=='Windows' else 'package.tar.gz')
         source.asset(package,archive,event,lambda done,total:progress('downloading',done,total))
         cancelled(event); progress('verifying',package['size'],package['size'])
         root=extract_package(archive,temporary/'extracted',event)
         probe_home=temporary/'probe';probe_home.mkdir()
-        probe(root/'orbit-bin',version,probe_home,event);cancelled(event)
+        probe(root/('orbit-bin.exe' if platform.system()=='Windows' else 'orbit-bin'),version,probe_home,event);cancelled(event)
         stamp=dict(version=version,sha256=package['digest'][7:])
         atomic_text(root/'ota-install.json',json.dumps(stamp))
         target=folder/'releases'/version
@@ -235,6 +245,28 @@ def stage_release(folder, release, event, progress, source=None):
         if target.exists():
             if target.is_symlink() or json.loads((target/'ota-install.json').read_text())!=stamp:
                 raise ValueError('同版本更新目录已存在且校验不同，未覆盖已有文件')
-            probe(target/'orbit-bin',version,probe_home,event)
+            probe(target/('orbit-bin.exe' if platform.system()=='Windows' else 'orbit-bin'),version,probe_home,event)
         else:os.replace(root,target)
         return stamp
+
+
+def extract_windows_package(archive_path,destination,event):
+    destination=Path(destination);seen=set();total=0
+    reserved={'CON','PRN','AUX','NUL',*(f'COM{i}' for i in range(1,10)),*(f'LPT{i}' for i in range(1,10))}
+    with zipfile.ZipFile(archive_path) as archive:
+        for member in archive.infolist():
+            cancelled(event);path=PurePosixPath(member.filename);key=member.filename.casefold()
+            if (path.is_absolute() or not path.parts or path.parts[0]!='orbit' or '..' in path.parts
+                or '\\' in member.filename or ':' in member.filename or key in seen or len(seen)>=20000
+                or any(part.rstrip(' .')!=part or part.split('.')[0].upper() in reserved for part in path.parts)
+                or (member.external_attr>>16)&0o170000==0o120000):raise ValueError('Windows 更新包包含不安全路径')
+            seen.add(key);total+=member.file_size
+            if total>2*1024**3:raise ValueError('更新包展开后过大')
+            target=destination.joinpath(*path.parts)
+            if member.is_dir():target.mkdir(parents=True,exist_ok=True)
+            else:
+                target.parent.mkdir(parents=True,exist_ok=True)
+                with archive.open(member) as source,target.open('xb') as output:shutil.copyfileobj(source,output)
+    root=destination/'orbit'
+    if any(not (root/name).is_file() for name in ('orbit.exe','orbit-bin.exe')):raise ValueError('Windows 更新包缺少启动文件')
+    return root

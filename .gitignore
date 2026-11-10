@@ -22,6 +22,8 @@ tasks.json
 tasks.json.*
 daily/
 learning/
+!assets/learning/
+!assets/learning/**
 station/
 *.sqlite*
 *.db
@@ -36,3 +38,6 @@ credentials.json
 *.key
 .idea/
 .vscode/
+
+release/**/*.zip
+release/**/*.exe

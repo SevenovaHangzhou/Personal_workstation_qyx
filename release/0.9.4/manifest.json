@@ -1,0 +1,52 @@
+{
+  "version": "0.9.4",
+  "platform": "linux-x86_64",
+  "minimum_glibc": "2.35",
+  "source_commit": "31bd69d319c2d78aa1303825be28f77424316ae0",
+  "built_at": "2026-10-31T10:24:37.966244+00:00",
+  "python": "3.12.16",
+  "pyinstaller": "6.22.3",
+  "runtime_packages": {
+    "PyQt5": "5.15.11",
+    "PyQt5-Qt5": "5.15.19",
+    "PyQt5-sip": "12.20.0",
+    "readerwriterlock": "1.0.9",
+    "typing_extensions": "4.16.0",
+    "starlette": "0.52.1",
+    "anyio": "4.15.1",
+    "idna": "3.20"
+  },
+  "artifacts": [
+    {
+      "file": "orbit-0.9.4-linux-x86_64.tar.gz",
+      "bytes": 56166240,
+      "sha256": "81f5d393949164b43d6555421e9ade6d49bf815032b7f8dd69206e1f713bad54"
+    },
+    {
+      "file": "sevenova-orbit_0.9.4_amd64.deb",
+      "bytes": 59887944,
+      "sha256": "4da805bada88cd63c35bc6bd20acb0cdde2f98857dea20fd728cc241dc287adf"
+    }
+  ],
+  "verification": [
+    "frozen --version",
+    "frozen --self-test",
+    "offscreen startup/screenshot",
+    "extracted portable --self-test",
+    "extracted Debian --self-test",
+    "Debian-style command symlink --self-test"
+  ],
+  "user_data_included": false,
+  "codex_credentials_included": false,
+  "source_dirty": true,
+  "source_file_sha256": {
+    ".gitignore": "13838ee0a0f0b545de7db7ca753def3ec1bdc6886a8c310015220972509c0298",
+    "art.py": "5fce2c36b90653b47b576da955d3593c1df573f224d7ea3e46b7969ab5ee4eb5",
+    "assets/orbit.svg": "378ae6ca4e6e93a2f5a2eb43ea47d00c9344eddfb211ef444d5957c2ea74b09c",
+    "assets/learning/zhixing.json": "c3d692c6f2450f77f1227c50c16dd8a5db7b36d635486057f30717093957f98e",
+    "docs/BRAND_THEME.md": "3bf2455a23578514b0f388fe864c26c29ccc48fbf1f3a3fad886551c20e4cb55",
+    "release/README.md": "30e968920088b51c2959adf6d19995089fce9cde832137fa17ce3797c450475f",
+    "typedefine/TypeDefine.py": "78e9445670cc84d0f310bbef026856deefa37761ab0525cfbe7f5690b37af6ae"
+  },
+  "publication": "local build; not published to GitHub"
+}

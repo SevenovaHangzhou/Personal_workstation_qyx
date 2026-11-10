@@ -1,0 +1,69 @@
+{
+  "version": "0.9.6",
+  "platform": "linux-x86_64",
+  "minimum_glibc": "2.35",
+  "source_commit": "31bd69d319c2d78aa1303825be28f77424316ae0",
+  "built_at": "2026-10-31T11:07:12.200030+00:00",
+  "python": "3.12.16",
+  "pyinstaller": "6.22.3",
+  "runtime_packages": {
+    "PyQt5": "5.15.11",
+    "PyQt5-Qt5": "5.15.19",
+    "PyQt5-sip": "12.20.0",
+    "readerwriterlock": "1.0.9",
+    "typing_extensions": "4.16.0",
+    "starlette": "0.52.1",
+    "anyio": "4.15.1",
+    "idna": "3.20"
+  },
+  "artifacts": [
+    {
+      "file": "orbit-0.9.6-linux-x86_64.tar.gz",
+      "bytes": 56669222,
+      "sha256": "011e9a17f7c82db8d534368e8e9605d04e74b9d91618a61ceaceef3439be2c22"
+    },
+    {
+      "file": "sevenova-orbit_0.9.6_amd64.deb",
+      "bytes": 60437872,
+      "sha256": "c18f2edcecd0200677a4a2a1e076c30e1e42b3a717bf69a39b24e6abbf308851"
+    }
+  ],
+  "verification": [
+    "frozen --version",
+    "frozen --self-test",
+    "offscreen startup/screenshot",
+    "extracted portable --self-test",
+    "extracted Debian --self-test",
+    "Debian-style command symlink --self-test"
+  ],
+  "user_data_included": false,
+  "codex_credentials_included": false,
+  "source_dirty": true,
+  "source_file_sha256": {
+    ".gitignore": "13838ee0a0f0b545de7db7ca753def3ec1bdc6886a8c310015220972509c0298",
+    "art.py": "5fce2c36b90653b47b576da955d3593c1df573f224d7ea3e46b7969ab5ee4eb5",
+    "assets/orbit.svg": "378ae6ca4e6e93a2f5a2eb43ea47d00c9344eddfb211ef444d5957c2ea74b09c",
+    "codex_support.py": "3ce1108646d7d59ac1beaebca1cca517bc1d36d5f4ebabb1400cfe502b0d4b91",
+    "daily_summary.py": "dda4940ba085d57bfad3da96d4b2801625fcbdb7761e6336b9cf2b8a3ab0f213",
+    "docs/BRAND_THEME.md": "3bf2455a23578514b0f388fe864c26c29ccc48fbf1f3a3fad886551c20e4cb55",
+    "learning_runner.py": "cdd288b1d3060a72a5938325670baba392f269eb15937cbbcad17413c153be29",
+    "learning_tutor.py": "1be887c48fbbeacff1ac02bade4bbdc49eb9e72cb3b11ea9b597765dec6dd995",
+    "main.py": "8a191bafc030c0b3ebc6f33f5025d8cc3bf7ca2e4f5d3100314a45ad8f1aea58",
+    "process_environment.py": "4cf2da94ec9438811c08396a274f77ed1f11fabff0e95e03fd5b966b0a9bfc6c",
+    "release/README.md": "f42f8e6f3796f32c469fa3b2f7acdaf09a0a41308db05f55f7cb46e4635ebd21",
+    "runtime.py": "e71e2ce1866175281ef64bf9bec9ae387e85cdeaab3ebdc518850cdcd83dc75e",
+    "station_backend.py": "c5fb029773a00ab4462f9b72b53082a807ee6633e2646fb661d379c5b5678e0c",
+    "station_executor.py": "229b2f35130deaad2445d83b31b4d6eff7341bd84ac0e374922806d93d4a3ad8",
+    "tests/test_codex.py": "56c02753c22736f04796a14c87504830f136aa064492b8274b0c9b689d4e5fb7",
+    "tests/test_daily.py": "4177a005173a03011a272f0a8e25d5bd912b188822b04b8f14ab7fc068fecd7d",
+    "tests/test_learning.py": "b7a08a7656af710f141d03759e6a41cab7ae4a0cd1dac6a8a6f332d6b414296a",
+    "tests/test_learning_tutor.py": "9d26e2197dae2a0ddafc5ae001c06e1b3083b8ecbefef971c5a2468113a0bbe7",
+    "tests/test_process_environment.py": "31cbbd57258c559357f2e1306de0fcff1f27ff99a4dd77dab70e00b6915e5487",
+    "tests/test_station.py": "2b41cc89397441c957217f238dc176867020485405587a4a86199280d5065f97",
+    "typedefine/TypeDefine.py": "8da9376caef309e16adbaf66d486859d6183f0e310e3bb87c45663a825ac91bc",
+    "assets/learning/zhixing.json": "c3d692c6f2450f77f1227c50c16dd8a5db7b36d635486057f30717093957f98e",
+    "window_activation.py": "b47e91aeb3ccc254bd6e1cab5a17941ab0681b25f35e746009fa2941644707d5",
+    "tests/test_window_activation.py": "e02ffc5e21c4a4bf9e351c024b9bdc94b48ff998a68546e466d572bda5c6623b"
+  },
+  "publication": "local build; not published to GitHub"
+}

@@ -1,3 +1,4 @@
+import os
 #!/usr/bin/env python3
 """ORBIT / 星序 — a native Qt desktop attention and task manager."""
 import argparse
@@ -5,7 +6,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from PyQt5.QtCore import Qt, QSize, QDate, QTimer, QUrl, QStandardPaths
+from PyQt5.QtCore import Qt, QSize, QDate, QTimer, QThread, QEventLoop, QUrl, QStandardPaths
 from PyQt5.QtGui import QColor, QFont, QKeySequence, QDesktopServices
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QFrame, QLabel,
     QPushButton, QVBoxLayout, QHBoxLayout, QGridLayout, QLineEdit, QTextEdit,
@@ -19,6 +20,7 @@ from model import CATEGORIES, STATUSES, make_task, progress, parse_binding, has_
 from art import icon, OrbitMark
 from framework import api
 from runtime import MomoRuntime, DataSpaceInUse
+from window_activation import WindowActivation, reveal_window
 from typedefine.TypeDefine import APP_VERSION
 
 from theme import APP_NAME, APP_WORDMARK, APP_DISPLAY_NAME, TAGLINE, CATEGORY_COLORS, STYLE
@@ -227,6 +229,8 @@ class Momo(QMainWindow):
         self.tray.setToolTip(APP_DISPLAY_NAME+" · 任务与专注")
         menu=QMenu(self)
         menu.addAction("打开"+APP_NAME,self.restore_window)
+        if self.runtime.graph and self.runtime.graph.url:
+            menu.addAction("查看运行图谱",lambda:QDesktopServices.openUrl(QUrl(self.runtime.graph.url)))
         menu.addAction("需要我处理",self.open_attention)
         menu.addAction("日报与同步",self.open_daily)
         menu.addAction('应用更新',self.open_updates)
@@ -964,8 +968,28 @@ class Momo(QMainWindow):
         self.station_dialog=AttentionDialog(self,self.runtime.station)
         self.station_dialog.show()
 
+    def drain_ui_workers(self):
+        """Called on the Qt control thread before domain services are stopped."""
+        for timer in self.findChildren(QTimer):
+            timer.stop()
+        workers = self.findChildren(QThread)
+        for worker in workers:
+            worker.requestInterruption()
+            for name in ("cancel_event", "stop"):
+                event = getattr(worker,name,None)
+                if hasattr(event,"set"): event.set()
+        for worker in workers:
+            worker.wait()
+        # Deliver already queued finished/result callbacks while services and
+        # observation still exist. New UI input is excluded during teardown.
+        QApplication.processEvents(QEventLoop.ExcludeUserInputEvents)
+        for timer in self.findChildren(QTimer):
+            timer.stop()
+        if any(worker.isRunning() for worker in self.findChildren(QThread)):
+            raise RuntimeError("界面回调仍启动了新线程，尚不能关闭服务")
+
     def restore_window(self):
-        self.showNormal(); self.raise_(); self.activateWindow()
+        reveal_window(self)
 
     def exit_application(self):
         running=bool(self.runtime.station.workers) or self.runtime.daily.snapshot()["busy"] or self.runtime.learning.revision()["busy"]
@@ -1010,33 +1034,49 @@ def main():
     parser.add_argument('--version', action='version', version=APP_DISPLAY_NAME+' '+APP_VERSION)
     parser.add_argument('--self-test', action='store_true', help='使用临时数据离线检查服务、学习资源和系统 Git，不调用模型')
     parser.add_argument("--data-dir",type=Path,help="指定本地数据目录")
+    parser.add_argument("--graph",action="store_true",help="启用本机只读 YomkGraph 运行图谱（默认关闭）")
+    parser.add_argument("--graph-port",type=int,default=18767,help="图谱端口，默认 18767；仅监听 127.0.0.1")
     parser.add_argument("--screenshot",type=Path,help="保存主窗口截图后退出（支持 QT_QPA_PLATFORM=offscreen）")
     parser.add_argument("--screenshot-view",choices=["today","board","mini","attention","station"],default="today")
     args=parser.parse_args()
+    if not 0 <= args.graph_port <= 65535:
+        parser.error("--graph-port 必须为 0–65535；0 表示随机空闲端口")
     if args.self_test and (args.data_dir or args.screenshot):
         parser.error('--self-test 始终使用临时数据，不能与 --data-dir 或 --screenshot 合用')
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling,True); QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps,True)
     app=QApplication(sys.argv[:1])
-    # These identifiers locate existing user data; the visible brand is independent.
+    # Keep the desktop/window identity compatible; data_paths owns storage naming.
     app.setApplicationName("Momo"); app.setOrganizationName("MomoLocal"); app.setApplicationDisplayName(APP_DISPLAY_NAME)
     app.setWindowIcon(icon("orbit","#426c83",64)); app.setStyle("Fusion"); app.setFont(QFont("Noto Sans CJK SC",10)); app.setStyleSheet(STYLE)
     if QSystemTrayIcon.isSystemTrayAvailable(): app.setQuitOnLastWindowClosed(False)
     if args.self_test:
         from release_check import run_checks
         try:
-            return run_checks(app, Momo)
+            return run_checks(app, Momo, graph_port=args.graph_port if args.graph else None)
         except Exception:
             import traceback
             traceback.print_exc()
             return 1
         finally:
             api.shutdown()
-    directory=args.data_dir or Path(QStandardPaths.writableLocation(QStandardPaths.AppDataLocation))
-    runtime=MomoRuntime(directory/"tasks.json")
+    try:
+        from data_paths import default_data_directory
+        directory=args.data_dir or default_data_directory(Path((os.environ.get('LOCALAPPDATA') if os.name=='nt' else None) or QStandardPaths.writableLocation(QStandardPaths.GenericDataLocation)))
+    except (ValueError,OSError,RuntimeError) as exc:
+        QMessageBox.critical(None,APP_NAME+' 数据目录未就绪',str(exc)); return 1
+    activation=None if args.screenshot else WindowActivation(directory,app)
+    if activation and activation.request():
+        return 0
+    runtime=MomoRuntime(directory/"tasks.json",graph_port=args.graph_port if args.graph else None)
+    window=None
     apply_update=False
     try:
         runtime.start()
-        window=Momo(runtime); window.show()
+        if runtime.graph: print("星序 YomkGraph: "+runtime.graph.url,flush=True)
+        if activation: activation.listen()
+        window=Momo(runtime)
+        if activation: activation.requested.connect(lambda startup_id: reveal_window(window,startup_id))
+        window.show()
         apply_update=True
         QTimer.singleShot(0,runtime.update_service.mark_started)
         if args.screenshot:
@@ -1049,12 +1089,26 @@ def main():
                 app.exit(0 if target.grab().save(str(args.screenshot)) else 1)
             QTimer.singleShot(450,capture)
         return app.exec_()
+    except DataSpaceInUse as exc:
+        if activation and activation.request(timeout_ms=4000,retry=True):
+            return 0
+        QMessageBox.information(None,APP_NAME+" 已在运行",str(exc)+"。\n若已有窗口仍未出现，请从托盘打开星序；旧版本需完整退出后重新启动一次。")
+        return 75
     except (ValueError,OSError,RuntimeError) as exc:
         apply_update=False
-        QMessageBox.critical(None,APP_NAME+" 启动失败",str(exc)); return 75 if isinstance(exc,DataSpaceInUse) else 1
+        QMessageBox.critical(None,APP_NAME+" 启动失败",str(exc)); return 1
     finally:
-        try: runtime.close(apply_update=apply_update)
-        finally: api.shutdown()
+        if activation: activation.close()
+        try:
+            if runtime.graph: runtime.graph.stop_http()
+            if window: window.drain_ui_workers()
+        finally:
+            ui_alive = bool(window and any(worker.isRunning() for worker in window.findChildren(QThread)))
+            if not ui_alive:
+                try: runtime.close(apply_update=apply_update,final_shutdown=True)
+                finally:
+                    # Do not clear services underneath a producer that failed to drain.
+                    if not runtime.started: api.shutdown()
 
 
 if __name__=="__main__": sys.exit(main())

@@ -11,6 +11,8 @@ from ui_helpers import box, label, button, clear, line
 from learning_content import SUBJECT_MODE, ordered_lessons
 from learning_tutor_ui import TutorPanel
 from learning_knowledge_ui import KnowledgePanel
+from learning_diagram_ui import LessonDiagram
+from learning_progress import progress_view
 
 STATUS = {'queued':'排队中','running':'生成中','review':'待审阅','failed':'生成失败',
           'cancelled':'已停止','interrupted':'已中断','needs_input':'需要补充信息'}
@@ -33,7 +35,12 @@ class LearningDialog(QDialog):
         self.course_page=QWidget(); page=box(self.course_page,margins=(16,16,16,16),spacing=12)
         self.course_status=label('','section',True); page.addWidget(self.course_status)
         self.read_button=button('开始学习','primary',callback=self.read); page.addWidget(self.read_button)
-        self.progress=QProgressBar(); self.progress.setTextVisible(False); page.addWidget(self.progress)
+        page.addWidget(button('提出意见 / 重新生成','outline',callback=self.improve))
+        self.progress=QProgressBar(); self.progress.setObjectName('courseProgress'); self.progress.setTextVisible(False)
+        self.progress.setStyleSheet('QProgressBar#courseProgress {min-height:12px; max-height:12px; border-radius:6px;} QProgressBar::chunk {border-radius:6px;}')
+        self.progress.setToolTip('按实际阶段前进；不是预计耗时百分比。模型未报告阶段时保持原阶段。')
+        page.addWidget(self.progress)
+        self.progress_text=label('','section',True); page.addWidget(self.progress_text)
         self.jobs=QListWidget(); self.jobs.currentItemChanged.connect(self.show_job); page.addWidget(self.jobs,1)
         self.job_detail=QPlainTextEdit(); self.job_detail.setReadOnly(True); self.job_detail.setMaximumHeight(160); page.addWidget(self.job_detail)
         actions=box(horizontal=True); self.stop_button=button('停止生成','outline',callback=self.cancel); actions.addWidget(self.stop_button)
@@ -59,7 +66,30 @@ class LearningDialog(QDialog):
         for course in self.client.catalog():
             self.add_course(course)
         row=box(horizontal=True); row.addWidget(button('绑定所选课程','primary',callback=self.bind)); row.addWidget(button('解除课程绑定','outline',callback=self.unbind)); catalog.addLayout(row)
-        self.tabs.addTab(bind_page,'绑定已有课程'); self.tabs.setCurrentIndex(tab)
+        self.tabs.addTab(bind_page,'绑定已有课程')
+        self.improve_page=QWidget(); improve_shell=box(self.improve_page,spacing=10)
+        improve_scroll,improve_layout=scroll_body(); improve_shell.addWidget(improve_scroll,1)
+        self.tabs.addTab(self.improve_page,'改进课程')
+        improve_layout.addWidget(label('让课程更好懂，也更扎实','h2',True))
+        self.base_course=label('','section',True); improve_layout.addWidget(self.base_course)
+        improve_layout.addWidget(label('写下哪里跳步、哪里不直观，或希望增加的讲解与案例。系统会参考当前课程，重建知识链路并生成新版本。','muted',True))
+        self.feedback=QPlainTextEdit(); self.feedback.setAccessibleName('课程重新生成的改进意见')
+        self.feedback.setPlaceholderText('例如：先用一次控制周期建立整体直觉，再逐层解释 PDO、SM 与 FMMU。减少缩写堆叠，加入数据流图和分步算例。')
+        self.feedback.setMinimumHeight(130); self.feedback.setMaximumHeight(230); improve_layout.addWidget(self.feedback)
+        self.feedback_notice=label('','muted',True); improve_layout.addWidget(self.feedback_notice)
+        suggestions=box(horizontal=True,spacing=8)
+        for title,text in [('从零搭体系','从零介绍必要基础，先建立全景，再按真实先修关系逐层深入；不要把知识清单当成讲解。'),
+                           ('讲透关键步骤','用一个贯穿案例逐步解释关键过程，写清每步为什么、条件和结果，补充反例与迁移练习。'),
+                           ('增加直观图解','对数据流、空间关系或时序难点加入有教学作用的原生图解，说明观察顺序，并用文字解释图中关系。')]:
+            suggestions.addWidget(button(title,'outline',callback=lambda checked=False,value=text:self.add_feedback(value)))
+        improve_layout.addLayout(suggestions)
+        improve_layout.addWidget(label('旧课程与作答保留；新草稿通过结构和教学组织检查后接入。生成期间仍可学习旧课程，切换绑定不会被新结果覆盖。','muted',True))
+        self.regenerate_button=button('按意见重新生成课程','primary',callback=self.regenerate); improve_shell.addWidget(self.regenerate_button)
+        self._feedback_course_id=None; self._saved_feedback=''
+        self.feedback_timer=QTimer(self); self.feedback_timer.setSingleShot(True); self.feedback_timer.setInterval(700)
+        self.feedback_timer.timeout.connect(self.save_feedback)
+        self.feedback.textChanged.connect(self.feedback_changed)
+        self.tabs.setCurrentIndex(tab)
         self.notice=label('','muted',True); layout.addWidget(self.notice)
         layout.addWidget(label('生成期间可切换其他任务；关闭此窗口也会继续生成，可从任务卡片查看进度。','muted',True))
         layout.addWidget(button('关闭',callback=self.accept))
@@ -78,7 +108,13 @@ class LearningDialog(QDialog):
     def refresh(self):
         try: state=self.client.snapshot(self.task_id)
         except (ValueError,OSError) as exc: self.notice.setText(str(exc)); return
+        self.update_generation_progress(state)
         if state['revision']==self._revision: return
+        feedback_course_id=(state['course'] or {}).get('id')
+        if feedback_course_id!=self._feedback_course_id:
+            if not self.save_feedback(): return
+            self._feedback_course_id=feedback_course_id; self._saved_feedback=state.get('feedback_draft','')
+            self.feedback.blockSignals(True); self.feedback.setPlainText(self._saved_feedback); self.feedback.blockSignals(False)
         self._revision=state['revision']; self.state=state
         existing={self.courses.item(i).data(Qt.UserRole) for i in range(self.courses.count())}
         for course in self.client.catalog():
@@ -86,8 +122,9 @@ class LearningDialog(QDialog):
                 self.add_course(course)
         self.filter_courses(self.search.text())
         self.course_status.setText('已绑定教程 · '+state['course']['title'] if state['course'] else '尚未绑定教程')
+        self.base_course.setText('改进对象：'+state['course']['title'] if state['course'] else '请先绑定需要改进的课程')
+        self.feedback_changed()
         self.read_button.setEnabled(bool(state['course'])); self.create_button.setEnabled(not state['busy'])
-        self.progress.setRange(0,0 if state['busy'] else 1); self.progress.setValue(0); self.progress.setVisible(state['busy'])
         current=self.jobs.currentItem(); selected=current.data(Qt.UserRole) if current else None
         self.jobs.clear()
         for job in reversed(state['jobs']):
@@ -102,12 +139,57 @@ class LearningDialog(QDialog):
         job=next((j for j in getattr(self,'state',{}).get('jobs',[]) if j['id']==selected),None)
         self.stop_button.setEnabled(bool(job and job['status'] in ('queued','running')))
         self.job_detail.setPlainText(job['message']+('\nCodex 聊天：'+job['thread_id'] if job.get('thread_id') else '') if job else '点击「创建课程」开始，或明确绑定已有课程。')
+        if job and job['input'].get('feedback'):
+            self.job_detail.appendPlainText('\n本次改进意见：\n'+job['input']['feedback'])
+        if getattr(self,'state',None): self.update_generation_progress(self.state)
+
+    def update_generation_progress(self,state):
+        jobs=state['jobs']; selected=self.jobs.currentItem()
+        identifier=selected.data(Qt.UserRole) if selected else None
+        job=next((j for j in reversed(jobs) if j['status'] in ('queued','running')),None)
+        if job is None: job=next((j for j in jobs if j['id']==identifier),jobs[-1] if jobs else None)
+        self.progress.setVisible(bool(job)); self.progress_text.setVisible(bool(job))
+        if not job: return
+        view=progress_view(job); self.progress.setRange(0,view['maximum']); self.progress.setValue(view['value'])
+        self.progress_text.setText(view['title']+(' · 已用 '+view['elapsed'] if view['elapsed'] else ''))
 
     def create(self):
         if not self.owner.flush_editors(): return
         try: self.client.start(self.task_id,self.subject.text(),self.concurrency.value())
         except (ValueError,OSError) as exc: self.notice.setText(str(exc)); return
         self.notice.setText('已在后台开始；可随时关闭此面板查看其他任务。'); self.tabs.setCurrentIndex(0); self.refresh(); self.refresh_owner()
+
+    def improve(self, course_id=None):
+        self.refresh()
+        if course_id and (not self.state['course'] or self.state['course']['id']!=course_id):
+            self.notice.setText('此阅读器已不是当前绑定课程，请先切回需要改进的课程。'); return
+        self.tabs.setCurrentWidget(self.improve_page); self.show(); self.raise_(); self.feedback.setFocus()
+
+    def add_feedback(self,text):
+        current=self.feedback.toPlainText().strip()
+        self.feedback.setPlainText(current+'\n'+text if current else text)
+
+    def feedback_changed(self):
+        size=len(self.feedback.toPlainText().strip()); state=getattr(self,'state',{})
+        self.feedback_notice.setText(f'{size} / 6000 字'+(' · 请精简意见后再生成' if size>6000 else ''))
+        self.regenerate_button.setEnabled(bool(state.get('course')) and not state.get('busy',False) and 1<=size<=6000)
+        self.feedback_timer.start()
+
+    def save_feedback(self):
+        self.feedback_timer.stop(); text=self.feedback.toPlainText()
+        if not self._feedback_course_id or text==self._saved_feedback: return True
+        try: self.client.save_feedback(self.task_id,self._feedback_course_id,text)
+        except (ValueError,OSError) as exc: self.notice.setText('改进意见尚未保存：'+str(exc)); return False
+        self._saved_feedback=text; return True
+
+    def regenerate(self):
+        if not self.owner.flush_editors(): return
+        course=self.state.get('course')
+        if not course: self.notice.setText('请先绑定需要改进的课程。'); return
+        try: self.client.regenerate(self.task_id,course['id'],self.feedback.toPlainText(),self.concurrency.value())
+        except (ValueError,OSError) as exc: self.notice.setText(str(exc)); return
+        self.notice.setText('已按意见在后台生成新版本；当前课程仍可继续学习。')
+        self.tabs.setCurrentIndex(0); self.refresh(); self.refresh_owner()
 
     def refresh_owner(self):
         # The main window remains editable while this panel is open.
@@ -151,6 +233,7 @@ class LearningDialog(QDialog):
         if folder.is_dir(): QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
     def done(self, code):
+        if not self.save_feedback(): return
         for reader in list(self.readers.values()):
             if not reader.close(): return
         self.timer.stop(); super().done(code)
@@ -159,6 +242,7 @@ class LearningDialog(QDialog):
         super().showEvent(event); self.refresh(); self.timer.start()
 
     def hideEvent(self,event):
+        self.save_feedback()
         self.timer.stop()
         for reader in self.readers.values(): reader.hide()
         super().hideEvent(event)
@@ -176,6 +260,8 @@ class CourseReader(QDialog):
         layout=box(self,margins=(20,20,20,20),spacing=12)
         heading=box(horizontal=True); heading.addWidget(label(self.course['title'],'h2',True),1)
         self.tutor_toggle=button('收起答疑','soft',callback=self.toggle_tutor); heading.addWidget(self.tutor_toggle); layout.addLayout(heading)
+        if hasattr(parent,'improve'):
+            heading.insertWidget(1,button('改进课程','outline',callback=lambda:parent.improve(self.course_id)))
         layout.addWidget(label('课程草稿 · 结构检查不代表教学质量验收；阅读或查看答案不会自动完成任务。','muted',True))
         self.study_split=QSplitter(Qt.Horizontal); self.study_split.setChildrenCollapsible(False); layout.addWidget(self.study_split,1)
         self.tabs=QTabWidget(); tabs=self.tabs; tabs.setMinimumWidth(640); self.study_split.addWidget(tabs)
@@ -286,6 +372,10 @@ class CourseReader(QDialog):
         self.tutor.set_lesson(lesson['id'],lesson['title'])
         self.knowledge.set_lesson(lesson)
         self.body.addWidget(self.selectable(lesson['title'],'h2'))
+        guide=lesson.get('teaching',{})
+        if isinstance(guide,dict):
+            for key,title in [('question','这一章解决什么'),('bridge','从已知走向新知'),('takeaway','先记住这一点')]:
+                if guide.get(key): self.body.addWidget(self.selectable(title+'\n'+guide[key]))
         for key,title in [('prerequisites','先修基础'),('goals','本课目标'),('scope','内容边界'),('pace','建议节奏')]:
             self.body.addWidget(self.selectable(title+'：'+lesson[key],'muted'))
         for section in lesson['sections']:
@@ -323,7 +413,15 @@ class CourseReader(QDialog):
 
     def add_block(self,block):
         kind=block['type']
-        if kind in ('formula','code_example'):
+        if kind=='diagram':
+            self.body.addWidget(LessonDiagram(block))
+        elif kind=='worked_example':
+            self.body.addWidget(self.selectable(block['title'],'h2'))
+            self.body.addWidget(self.selectable('已知条件与问题\n'+block['givens']))
+            for index,step in enumerate(block['steps'],1): self.body.addWidget(self.selectable(f'{index:02d} · '+step))
+            self.body.addWidget(self.selectable('回到问题\n'+block['result']))
+            self.body.addWidget(self.selectable('核对结果\n'+block['check'],'muted'))
+        elif kind in ('formula','code_example'):
             editor=QPlainTextEdit(block['text']); editor.setReadOnly(True); editor.setLineWrapMode(QPlainTextEdit.NoWrap)
             editor.setStyleSheet('font-family: monospace; background:#edf2f7; border-radius:8px; padding:8px;')
             editor.setFixedHeight(min(220,max(70,24*len(block['text'].splitlines())+25))); self.body.addWidget(editor)
@@ -344,6 +442,8 @@ class CourseReader(QDialog):
 
     def add_question(self,lesson,q):
         group=QGroupBox('练习 · '+q['id']); content=box(group,margins=(14,16,14,14),spacing=10)
+        level={'recognition':'起步 · 识别概念','application':'跟随 · 应用方法','transfer':'迁移 · 解释与辨析'}.get(q.get('level'))
+        if level: content.addWidget(label(level,'section'))
         content.addWidget(self.selectable(q['prompt']))
         key=json.dumps([lesson['id'],lesson['revision'],q['id']],ensure_ascii=False)
         saved=self.course['answers'].get(key,'')

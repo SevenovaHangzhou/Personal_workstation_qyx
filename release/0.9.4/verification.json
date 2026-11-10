@@ -1,0 +1,28 @@
+{
+  "version": "0.9.4",
+  "ui_tests": {
+    "count": 17,
+    "result": "passed"
+  },
+  "release_entry_tests": {
+    "count": 3,
+    "result": "passed"
+  },
+  "package_checks": [
+    "frozen --version",
+    "frozen --self-test",
+    "offscreen startup/screenshot",
+    "extracted portable --self-test",
+    "extracted Debian --self-test",
+    "Debian-style command symlink --self-test"
+  ],
+  "embedded_art": "seven stars, shortened thin segments and gold center verified inside frozen PYZ",
+  "source_dirty": true,
+  "restored_builtin_course_sha256": "c3d692c6f2450f77f1227c50c16dd8a5db7b36d635486057f30717093957f98e",
+  "installed": "/home/zlz/.local/share/applications/.orbit-runtime/0.9.4",
+  "desktop_launcher": "/home/zlz/.local/share/applications/com.sevenova.Orbit.desktop",
+  "previous_installation_preserved": true,
+  "running_instance_restarted": false,
+  "user_data_modified_by_installation": false,
+  "published_to_github": false
+}

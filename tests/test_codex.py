@@ -89,7 +89,7 @@ for line in sys.stdin:
     print(json.dumps({"id":message["id"],"result":result}),flush=True)
 ''')
             executable.chmod(0o755)
-            with patch("codex_support.shutil.which", return_value=str(executable)):
+            with patch("codex_support.find_codex", return_value=str(executable)):
                 with CodexRpc() as rpc:
                     process = rpc.process
                     self.assertEqual(rpc.list_threads()[0]["id"], "fixture-chat")
@@ -98,7 +98,7 @@ for line in sys.stdin:
                 self.assertIsNotNone(process.poll())
 
     def test_missing_cli_and_cancel_are_actionable(self):
-        with patch("codex_support.shutil.which", return_value=None):
+        with patch("codex_support.find_codex", return_value=None):
             with self.assertRaisesRegex(CodexError, "手动关联"):
                 with CodexRpc(): pass
         cancel = threading.Event(); cancel.set()

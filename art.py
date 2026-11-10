@@ -3,30 +3,41 @@ from PyQt5.QtCore import Qt, QRectF, QPointF, QSize
 from PyQt5.QtGui import QColor, QPainter, QPen, QPainterPath, QPixmap, QIcon
 from PyQt5.QtWidgets import QWidget
 from theme import PALETTE
+from math import hypot
 
 
-ORBIT_POINTS = ((4, 18), (7, 12), (5, 6), (11, 3), (18, 5), (21, 12), (16, 18))
+HEXAGON_POINTS = ((12, 3.75), (19.14, 7.875), (19.14, 16.125),
+                  (12, 20.25), (4.86, 16.125), (4.86, 7.875))
+
+
+def _star_path(x, y, radius):
+    star = QPainterPath(QPointF(x, y - radius))
+    a, b = .13636 * radius, .31818 * radius
+    star.cubicTo(x + a, y - b, x + b, y - a, x + radius, y)
+    star.cubicTo(x + b, y + a, x + a, y + b, x, y + radius)
+    star.cubicTo(x - a, y + b, x - b, y + a, x - radius, y)
+    star.cubicTo(x - b, y - a, x - a, y - b, x, y - radius)
+    star.closeSubpath()
+    return star
 
 
 def draw_orbit(painter, color, accent=None):
-    """Seven waypoints form an open trajectory; the last point is a small star."""
-    painter.setPen(QPen(QColor(color), .95, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    """Six vertex stars surround one centered star, linked by a hexagon."""
+    painter.setPen(QPen(QColor(color), .46875, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
     painter.setBrush(Qt.NoBrush)
-    path = QPainterPath(QPointF(*ORBIT_POINTS[0]))
-    for point in ORBIT_POINTS[1:]:
-        path.lineTo(QPointF(*point))
-    painter.drawPath(path)
-    painter.setBrush(QColor(PALETTE["surface"]))
-    for x, y in ORBIT_POINTS[:-1]:
-        painter.drawEllipse(QRectF(x - .95, y - .95, 1.9, 1.9))
-    x, y = ORBIT_POINTS[-1]
-    star = QPainterPath(QPointF(x, y - 2.25))
-    for dx, dy in [(.65, -.65), (2.25, 0), (.65, .65), (0, 2.25), (-.65, .65), (-2.25, 0), (-.65, -.65)]:
-        star.lineTo(x + dx, y + dy)
-    star.closeSubpath()
+    outline = QPainterPath()
+    for (x, y), (a, b) in zip(HEXAGON_POINTS, HEXAGON_POINTS[1:] + HEXAGON_POINTS[:1]):
+        length = hypot(a - x, b - y)
+        dx, dy = (a - x) / length * 2.25, (b - y) / length * 2.25
+        outline.moveTo(x + dx, y + dy)
+        outline.lineTo(a - dx, b - dy)
+    painter.drawPath(outline)
     painter.setPen(Qt.NoPen)
+    painter.setBrush(QColor(color))
+    for x, y in HEXAGON_POINTS:
+        painter.drawPath(_star_path(x, y, 1.5))
     painter.setBrush(QColor(accent or color))
-    painter.drawPath(star)
+    painter.drawPath(_star_path(12, 12, 4.125))
 
 
 def icon(name, color=PALETTE["muted"], size=20):
@@ -41,7 +52,7 @@ def icon(name, color=PALETTE["muted"], size=20):
     def line(x1, y1, x2, y2): painter.drawLine(QPointF(x1, y1), QPointF(x2, y2))
     def rect(x, y, w, h, r=3): painter.drawRoundedRect(QRectF(x, y, w, h), r, r)
     if name == "orbit":
-        draw_orbit(painter, color)
+        draw_orbit(painter, color, PALETTE["accent"])
     elif name == "sun":
         painter.drawEllipse(QRectF(7, 7, 10, 10))
         for points in [(12,2,12,4),(12,20,12,22),(2,12,4,12),(20,12,22,12),(5,5,6.5,6.5),(17.5,17.5,19,19),(5,19,6.5,17.5),(17.5,6.5,19,5)]: line(*points)
@@ -107,7 +118,7 @@ class OrbitMark(QWidget):
         self.compact = compact
         self.setFixedSize(42, 42) if compact else self.setFixedSize(118, 136)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
-        self.setAccessibleName("星序轨迹标记")
+        self.setAccessibleName("星序七星标记")
 
     def paintEvent(self, event):
         p=QPainter(self); p.setRenderHint(QPainter.Antialiasing)

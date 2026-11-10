@@ -7,7 +7,7 @@ from dag_layout import layers_for
 FORMAT = 'momo-learning-course-draft/v1'
 SUBJECT_MODE = 'subject_curriculum'
 BUILTIN_COURSE_ID = 'zhixing:robot-arm-control'
-BLOCKS = {'paragraph', 'list', 'formula', 'table', 'code_example', 'self_check', 'callout'}
+BLOCKS = {'paragraph', 'list', 'formula', 'table', 'code_example', 'self_check', 'callout', 'worked_example', 'diagram'}
 
 
 def need(condition, message):
@@ -86,6 +86,12 @@ def validate_package(package, expected=None):
                     need(isinstance(rows, list) and all(isinstance(r, list) and len(r)==len(headers) and all(isinstance(v,str) for v in r) for r in rows), '表格行无效')
                 elif kind == 'self_check':
                     need(text(block.get('prompt')) and text(block.get('answer')), '自测需要问题和参考解释')
+                elif kind == 'worked_example':
+                    need(all(text(block.get(k)) for k in ('title','givens','result','check')), '案例需有条件、结果与自查')
+                    need(isinstance(block.get('steps'),list) and 2<=len(block['steps'])<=20
+                         and all(text(step) for step in block['steps']), '案例需有至少两个有解释的步骤')
+                elif kind == 'diagram':
+                    validate_diagram(block)
                 else:
                     need(text(block.get('text')), '正文块不能为空')
         questions = lesson.get('questions'); ids = unique(questions, '练习')
@@ -99,6 +105,18 @@ def validate_package(package, expected=None):
     need(isinstance(package.get('unresolved'), list) and all(isinstance(v,str) for v in package['unresolved']), '缺口格式错误')
     if subject_mode: validate_curriculum(package, units)
     return package
+
+
+def validate_diagram(block):
+    need(all(text(block.get(k)) for k in ('title','caption')), '图解需要标题与示意边界说明')
+    nodes=block.get('nodes'); ids=unique(nodes,'图解节点')
+    need(2<=len(nodes)<=12 and all(text(n.get('title')) and text(n.get('explanation')) for n in nodes), '图解需要 2–12 个有解释的节点')
+    need(all(len(n['title'])<=60 and len(n['explanation'])<=2000 for n in nodes), '图解节点过长')
+    edges=block.get('edges')
+    need(isinstance(edges,list) and 1<=len(edges)<=24, '图解需要有向连线')
+    need(all(isinstance(e,dict) and e.get('source') in ids and e.get('target') in ids
+             and isinstance(e.get('label'),str) and len(e['label'])<=100 for e in edges), '图解连线无效')
+    layers_for(ids,[(e['source'],e['target']) for e in edges])
 
 
 def validate_curriculum(package, unit_ids):

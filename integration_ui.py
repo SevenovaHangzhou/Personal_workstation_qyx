@@ -1,4 +1,5 @@
 """Native dialogs for read-only Linear import and Git repository associations."""
+from observation import entry
 import threading
 from PyQt5.QtCore import Qt, QThread, QUrl
 from PyQt5.QtGui import QDesktopServices
@@ -16,6 +17,7 @@ class PullWorker(QThread):
         self.result = None
         self.error = ""
 
+    @entry("@UIWorker")
     def run(self):
         try:
             self.result = self.client.pull(self.include_closed, self.cancel_event)

@@ -11,7 +11,7 @@ import threading
 import time
 import uuid
 
-FLAGS=os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW
+FLAGS=os.O_RDONLY|getattr(os,'O_DIRECTORY',0)|getattr(os,'O_NOFOLLOW',0)
 
 
 class Retention:
@@ -104,3 +104,9 @@ class Retention:
             try:(self.root/batch).rmdir()
             except OSError:pass
         return result
+
+
+if os.name=="nt":
+    from windows_storage import WindowsRetention
+    class NativeRetention(WindowsRetention,Retention):pass
+    Retention=NativeRetention

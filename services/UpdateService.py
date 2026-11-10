@@ -1,5 +1,6 @@
 """Yomk-owned asynchronous OTA preparation and exit-time activation."""
 import copy
+from observation import entry, job
 from datetime import datetime, timezone
 import json
 import os
@@ -91,6 +92,7 @@ class UpdateService(MomoService):
             self.state.update(status=status,done=done,total=total,
                 message='后台下载更新，不影响当前任务' if status=='downloading' else '正在校验安装包并进行隔离自检')
 
+    @job("@UpdateWorker", "/UpdateService", "/prepare-update")
     def prepare(self):
         try:
             release=self.source.latest();cancelled(self.cancel)
@@ -127,6 +129,7 @@ class UpdateService(MomoService):
 
     def start_clock(self):
         if not self.auto_tick:return
+        @entry("/UpdateService")
         def clock():
             if self.stopping.wait(5):return
             while not self.stopping.is_set():

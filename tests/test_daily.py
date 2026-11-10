@@ -182,10 +182,10 @@ class SummaryTransportTests(unittest.TestCase):
         from unittest.mock import MagicMock
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);store=DailyStore(root/'daily');binary=root/'fake-codex'
-            binary.write_text('#!'+sys.executable+'\nimport os,sys\nfrom pathlib import Path\nassert "--ephemeral" in sys.argv\nassert \'mcp_servers."test-server".enabled=false\' in sys.argv\nassert "LINEAR_API_KEY" not in os.environ\nassert os.environ["OPENAI_API_KEY"]=="existing-fixture-auth"\nsys.stdin.read()\nPath(sys.argv[sys.argv.index("-o")+1]).write_text("压缩摘要")\n')
-            binary.chmod(0o755);rpc=MagicMock();rpc.return_value.__enter__.return_value.request.return_value={'config':{'mcp_servers':{'test-server':{'enabled':True}}}}
+            binary.write_text('#!'+sys.executable+'\nimport os,sys\nfrom pathlib import Path\nassert "--ephemeral" in sys.argv\nassert any(\'mcp_servers={\' in arg and \'enabled=false\' in arg for arg in sys.argv)\nassert "LINEAR_API_KEY" not in os.environ\nassert os.environ["OPENAI_API_KEY"]=="existing-fixture-auth"\nsys.stdin.read()\nPath(sys.argv[sys.argv.index("-o")+1]).write_text("压缩摘要")\n')
+            binary.chmod(0o755);rpc=MagicMock();rpc.return_value.__enter__.return_value.request.return_value={'config':{'mcp_servers':{'test-server':{'command':'fixture-server','enabled':True}}}}
             try:
-                with patch('daily_summary.shutil.which',return_value=str(binary)),patch('daily_summary.CodexRpc',rpc),patch.dict(os.environ,{'LINEAR_API_KEY':'fixture','OPENAI_API_KEY':'existing-fixture-auth'}):
+                with patch('daily_summary.find_codex',return_value=str(binary)),patch('daily_summary.CodexRpc',rpc),patch.dict(os.environ,{'LINEAR_API_KEY':'fixture','OPENAI_API_KEY':'existing-fixture-auth'}):
                     messages=[{'timestamp':'2026-10-27T13:00:00Z','role':'user','text':'已完成实现'}]
                     summarizer=CodexSummarizer(store);self.assertEqual(summarizer.summarize(messages,threading.Event()),'压缩摘要')
                     self.assertEqual(summarizer.summarize(messages,threading.Event()),'压缩摘要');self.assertEqual(rpc.call_count,1)

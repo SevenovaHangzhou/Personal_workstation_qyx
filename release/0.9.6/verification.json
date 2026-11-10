@@ -1,0 +1,46 @@
+{
+  "version": "0.9.6",
+  "all_tests": {
+    "count": 290,
+    "result": "passed"
+  },
+  "environment_tests_after_fixture_isolation": {
+    "count": 8,
+    "result": "passed"
+  },
+  "package_checks": [
+    "frozen --version",
+    "frozen --self-test",
+    "offscreen startup/screenshot",
+    "extracted portable --self-test",
+    "extracted Debian --self-test",
+    "Debian-style command symlink --self-test"
+  ],
+  "real_cli_smoke": {
+    "desktop_path": "/usr/local/bin:/usr/bin:/bin",
+    "resolved_cli": "/home/zlz/.local/bin/codex",
+    "create_persisted_chat": "passed",
+    "fresh_server_read": "passed",
+    "model_called": false,
+    "real_chat_history_modified": false
+  },
+  "embedded_cli_smoke": {
+    "embedded_modules_verified": [
+      "process_environment",
+      "station_executor",
+      "codex_support"
+    ],
+    "desktop_cli_discovery": "passed",
+    "frozen_child_environment_cleanup": "passed",
+    "chat_created_and_read_by_fresh_server": "passed",
+    "model_called": false,
+    "real_chat_history_modified": false
+  },
+  "source_dirty": true,
+  "installed": "/home/zlz/.local/share/applications/.orbit-runtime/0.9.6",
+  "desktop_launcher": "/home/zlz/.local/share/applications/com.sevenova.Orbit.desktop",
+  "previous_installation_preserved": true,
+  "running_instance_restarted": false,
+  "user_data_modified_by_installation": false,
+  "published_to_github": false
+}

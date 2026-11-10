@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import signal
 import subprocess
 import threading
 from pathlib import Path
-from process_environment import system_environment
+from platform_support import process_options
+from process_environment import system_environment, codex_environment, find_codex
 
 SCHEMA = {"type": "object", "properties": {
     "status": {"type": "string", "enum": ["review", "needs_input"]},
@@ -40,30 +40,24 @@ class CodexExecutor:
 
     def environment(self) -> dict:
         # Codex may use provider credentials from its existing environment.
-        env = {k: v for k, v in system_environment().items()
+        env = {k: v for k, v in codex_environment().items()
                if not k.upper().startswith(("LINEAR_", "LIN_API"))}
         return env
 
     def status(self) -> dict:
         """Check CLI presence without inspecting or changing authentication."""
-        binary = shutil.which("codex")
+        binary = find_codex()
         if not binary:
             return {"available": False, "message": "未找到本机 Codex CLI"}
         return {"available": True, "message": "使用系统 Codex · 沿用现有配置与认证"}
 
     @staticmethod
     def _stop(process: subprocess.Popen) -> None:
-        try:
-            os.killpg(process.pid, signal.SIGTERM)
-            process.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.wait(timeout=3)
-        except ProcessLookupError:
-            pass
+        from platform_support import stop_process
+        stop_process(process)
 
     def run(self, record: dict, folder: Path, cancel: threading.Event) -> dict:
-        binary = shutil.which("codex")
+        binary = find_codex()
         if not binary:
             raise RuntimeError("未找到本机 Codex CLI")
         folder.mkdir(parents=True, exist_ok=True)
@@ -83,7 +77,7 @@ class CodexExecutor:
         env = self.environment()
         with (folder / "events.jsonl").open("wb") as out, (folder / "stderr.log").open("wb") as err:
             process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=out,
-                                       stderr=err, env=env, start_new_session=True)
+                                       stderr=err, env=env, **process_options())
             try:
                 process.stdin.write(prompt.encode("utf-8"))
                 process.stdin.close()

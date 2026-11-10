@@ -165,7 +165,7 @@ class StationTests(unittest.TestCase):
         self.runtime.station = restored
         self.station = restored
         self.assertIsNone(restored.db._get_conn().execute("SELECT value FROM momo_settings WHERE key='codex_home'").fetchone())
-        with patch("station_executor.shutil.which", return_value="codex"), patch.dict(os.environ, {"CODEX_HOME": "/system/current/auth"}):
+        with patch("station_executor.find_codex", return_value="codex"), patch.dict(os.environ, {"CODEX_HOME": "/system/current/auth"}):
             self.assertTrue(restored.call("snapshot")["codex"]["available"])
             self.assertEqual(restored.executor.environment()["CODEX_HOME"], "/system/current/auth")
 
@@ -202,7 +202,7 @@ print(json.dumps({'type':'thread.started','thread_id':'test-thread'}))
             binary.chmod(0o755)
             (root / "auth").mkdir()
             executor = CodexExecutor()
-            with patch("station_executor.shutil.which", return_value=str(binary)), patch.dict(os.environ, {"LINEAR_API_KEY": "never-pass", "CODEX_HOME": str(root / "auth"), "OPENAI_API_KEY": "existing-test-config", "CUSTOM_CODEX_AUTH": "existing-auth"}):
+            with patch("station_executor.find_codex", return_value=str(binary)), patch.dict(os.environ, {"LINEAR_API_KEY": "never-pass", "CODEX_HOME": str(root / "auth"), "OPENAI_API_KEY": "existing-test-config", "CUSTOM_CODEX_AUTH": "existing-auth"}):
                 result = executor.run({"input_data": {"cwd": str(root), "goal": "生成文件", "acceptance": "文件存在", "sandbox": "workspace-write"}}, root / "logs", threading.Event())
             self.assertEqual(result["status"], "review")
             self.assertEqual(result["codex_thread_id"], "test-thread")
@@ -210,13 +210,13 @@ print(json.dumps({'type':'thread.started','thread_id':'test-thread'}))
 
     def test_system_cli_is_available_without_authentication_probe(self):
         executor = CodexExecutor()
-        with patch("station_executor.shutil.which", return_value="codex"), patch("station_executor.subprocess.run") as probe, patch("station_executor.subprocess.Popen") as child:
+        with patch("station_executor.find_codex", return_value="codex"), patch("station_executor.subprocess.run") as probe, patch("station_executor.subprocess.Popen") as child:
             self.assertTrue(executor.status()["available"])
             probe.assert_not_called()
             child.assert_not_called()
 
     def test_missing_cli_rejects_without_starting_execution(self):
-        with patch("station_executor.shutil.which", return_value=None), patch("station_executor.subprocess.Popen") as child:
+        with patch("station_executor.find_codex", return_value=None), patch("station_executor.subprocess.Popen") as child:
             executor = CodexExecutor()
             self.assertFalse(executor.status()["available"])
             with self.assertRaisesRegex(RuntimeError, "未找到"):
@@ -233,7 +233,7 @@ print(json.dumps({'type':'thread.started','thread_id':'test-thread'}))
             timer = threading.Timer(0.2, cancel.set)
             timer.start()
             start = time.monotonic()
-            with patch("station_executor.shutil.which", return_value=str(binary)):
+            with patch("station_executor.find_codex", return_value=str(binary)):
                 result = CodexExecutor().run({"input_data":{"cwd":str(root),"goal":"检查","acceptance":"返回","sandbox":"read-only"}}, root/"logs", cancel)
             timer.join()
             self.assertEqual(result["status"], "cancelled")
