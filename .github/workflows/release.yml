@@ -1,7 +1,7 @@
 name: Build and publish ORBIT
 on:
   push:
-    branches: [windows]
+    branches: [windows, main]
     tags: ['v*']
   workflow_dispatch:
 permissions:

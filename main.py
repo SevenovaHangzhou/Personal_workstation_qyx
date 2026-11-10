@@ -1,7 +1,7 @@
-import os
 #!/usr/bin/env python3
 """ORBIT / 星序 — a native Qt desktop attention and task manager."""
 import argparse
+import os
 import sys
 from datetime import date
 from pathlib import Path

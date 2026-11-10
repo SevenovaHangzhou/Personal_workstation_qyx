@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class ReleaseEntryTests(unittest.TestCase):
     def probe(self, *args, root):
-        env = dict(os.environ); env.update(HOME=str(root), XDG_DATA_HOME=str(root/'data'),
+        env = dict(os.environ); env.update(HOME=str(root), USERPROFILE=str(root), LOCALAPPDATA=str(root/'local'), APPDATA=str(root/'roaming'), XDG_DATA_HOME=str(root/'data'),
                                           QT_QPA_PLATFORM='offscreen')
         return subprocess.run([sys.executable, str(ROOT/'main.py'), *args], cwd=root,
                               env=env, capture_output=True, text=True, timeout=30)
