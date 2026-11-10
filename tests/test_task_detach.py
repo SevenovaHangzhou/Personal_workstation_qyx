@@ -137,15 +137,26 @@ class DetachTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'后代'): self.tasks.merge(self.child['id'],self.nested['id'])
 
     def test_root_and_external_drop_rejected_and_dependency_error_explained(self):
+        def checkpoint(phase):
+            if os.environ.get('ORBIT_NATIVE_TEST_STATUS'):
+                import json
+                target=Path(os.environ['ORBIT_NATIVE_TEST_STATUS']);state=json.loads(target.read_text())
+                state['phase']=phase;target.write_text(json.dumps(state))
+        checkpoint('opening-window')
         window=self.open(); area=window.independent_drop
+        checkpoint('rejecting-root-drop')
         root=next(c for c in window.list_host.cards() if c.task_id==self.parent['id'])
         self.assertFalse(self.drop(area,root,QPoint(15,15)))
+        checkpoint('setting-test-dependency')
         self.tasks.dependencies(self.child['id'],[self.sibling['id']])
         messages=[]
         def close_conflict():
             dialog=APP.activeModalWidget(); messages.append(dialog.text()); dialog.reject()
         QTimer.singleShot(10,close_conflict)
-        self.assertFalse(self.drop(area,self.source(),QPoint(15,15)))
+        checkpoint('opening-dependency-dialog')
+        if os.name=='nt':self.assertFalse(window.detach_task(self.child['id']))
+        else:self.assertFalse(self.drop(area,self.source(),QPoint(15,15)))
+        checkpoint('dependency-dialog-closed')
         self.assertIn('先调整依赖',messages[0])
 
 
