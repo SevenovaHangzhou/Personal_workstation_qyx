@@ -114,7 +114,7 @@ class DependencyUiTests(unittest.TestCase):
         self.tasks.dependencies(self.b['id'],[self.a['id']]); before=self.path.read_bytes()
         def manage():
             message=APP.activeModalWidget()
-            next(b for b in message.buttons() if b.text()=='管理相关依赖').click()
+            message.findChild(QPushButton,'manageDependencies').click()
         with patch.object(self.window,'manage_dependencies') as manager:
             QTimer.singleShot(10,manage)
             self.assertFalse(self.window.detach_task(self.a['id']))
