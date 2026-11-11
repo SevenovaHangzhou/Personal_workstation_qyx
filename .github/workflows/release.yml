@@ -4,6 +4,12 @@ on:
     branches: [windows]
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing version tag to build and publish (leave empty for a test build)
+        required: false
+        default: ""
+        type: string
 concurrency:
   group: orbit-release-${{ github.ref }}
   cancel-in-progress: true
@@ -20,10 +26,12 @@ jobs:
       PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0 libxcb-xinerama0 libxcb-cursor0 fonts-noto-cjk
+      - run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0 libxcb-xinerama0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 fonts-noto-cjk
       - run: python -m pip install -r packaging/requirements-release.txt -r packaging/requirements-build.txt
       - run: python scripts/test_linux_release.py
       - run: python scripts/build_release.py --work-dir build/linux --output artifacts
@@ -46,6 +54,8 @@ jobs:
       PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -63,6 +73,8 @@ jobs:
       PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -83,13 +95,17 @@ jobs:
           path: |
             build/windows/*.png
   publish:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || startsWith(inputs.release_tag, 'v')
     needs: [linux, windows-tests, windows]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
       - uses: actions/download-artifact@v4
         with:
           pattern: '*-release'
@@ -101,7 +117,7 @@ jobs:
           import hashlib,json,os
           from pathlib import Path
           from typedefine.TypeDefine import APP_VERSION
-          assert os.environ['GITHUB_REF_NAME']=='v'+APP_VERSION
+          assert os.environ['RELEASE_TAG']=='v'+APP_VERSION
           root=Path('artifacts')
           for name in ('manifest.json','windows-manifest.json','luma-manifest.json','luma-windows-manifest.json'):
               data=json.loads((root/name).read_text());assert data['version']==APP_VERSION
@@ -113,4 +129,4 @@ jobs:
       - name: Publish verified Linux and Windows applications together
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" artifacts/* --verify-tag --title "星序 ORBIT · 知序 LUMA ${GITHUB_REF_NAME}" --notes-file "release/${GITHUB_REF_NAME#v}/RELEASE_NOTES.md"
+        run: gh release create "$RELEASE_TAG" artifacts/* --verify-tag --title "星序 ORBIT · 知序 LUMA ${RELEASE_TAG}" --notes-file "release/${RELEASE_TAG#v}/RELEASE_NOTES.md"
