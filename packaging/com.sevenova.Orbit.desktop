@@ -2,10 +2,10 @@
 Type=Application
 Name=ORBIT
 Name[zh_CN]=星序 ORBIT
-Comment=Tasks, focused work and guided learning
-Comment[zh_CN]=任务、专注与循序学习
+Comment=Work, issues and daily reports
+Comment[zh_CN]=工作任务、Linear 与每日进展
 Exec=/opt/sevenova-orbit/orbit
 Icon=com.sevenova.Orbit
 Terminal=false
-Categories=Office;Education;
+Categories=Office;
 StartupWMClass=Momo

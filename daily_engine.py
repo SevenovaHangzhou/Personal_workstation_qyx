@@ -12,7 +12,8 @@ from progress_evidence import period_records, report_lines
 
 
 class DailyEngine:
-    def __init__(self, store, tasks, writer_factory, station, history=None, summarizer=None):
+    def __init__(self, store, tasks, writer_factory, station, history=None, summarizer=None, bound_only=False):
+        self.bound_only=bound_only
         self.store, self.tasks, self.writer_factory, self.station = store, tasks, writer_factory, station
         self.history = history or HistoryIndex(store)
         self.summarizer = summarizer or CodexSummarizer(store)
@@ -117,11 +118,17 @@ class DailyEngine:
         earliest = self.store.get('history_start')
         if earliest is None:
             earliest = start.isoformat(); self.store.put('history_start', earliest)
+        if self.bound_only:
+            from split_migration import bound_threads
+            self.history.allowed_threads=bound_threads(self.tasks.tasks)
         errors = []; scan_errors = self.history.scan(cancel, datetime.fromisoformat(earliest))
         errors.extend(scan_errors)
         existing = self.store.report(day)
         if existing:
             content = existing['content']
+            if self.bound_only:
+                from split_migration import restrict_report
+                content=restrict_report(content,self.tasks.tasks)
         else:
             tasks = self.eligible(self.tasks.tasks, end)
             groups = self.history.between(start, end)

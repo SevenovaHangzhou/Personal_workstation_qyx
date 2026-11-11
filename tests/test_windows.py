@@ -113,7 +113,7 @@ class WindowsNativeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);base=root/'base';base.mkdir();(base/'VERSION').write_text('0.9.7')
             data=root/'local/Sevenova/Orbit';updates=data/'updates';overlay=updates/'releases/0.9.8';overlay.mkdir(parents=True)
-            (overlay/'orbit-bin.exe').write_bytes(b'fixture');(overlay/'ota-install.json').write_text(json.dumps({'version':'0.9.8'}))
+            (overlay/'orbit-bin.exe').write_bytes(b'fixture');(overlay/'ota-install.json').write_text(json.dumps({'version':'0.9.8','app_id':'com.sevenova.Orbit'}))
             pointer=updates/'current-version';pointer.write_text('0.9.8')
             calls=[]
             def run(command,**options):

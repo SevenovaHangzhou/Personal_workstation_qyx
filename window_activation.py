@@ -66,10 +66,13 @@ class WindowActivation(QObject):
             socket.setReadBufferSize(2049)
             socket.disconnected.connect(socket.deleteLater)
             socket.readyRead.connect(lambda s=socket: self._read(s))
-            QTimer.singleShot(2000, socket.disconnectFromServer)
+            timeout=QTimer(socket); timeout.setSingleShot(True)
+            timeout.timeout.connect(socket.disconnectFromServer); timeout.start(2000)
             self._read(socket)
 
     def _read(self, socket):
+        from PyQt5 import sip
+        if sip.isdeleted(socket): return
         if socket.property('handled'):
             return
         if not socket.canReadLine():

@@ -13,13 +13,13 @@ from daily_engine import DailyEngine
 
 
 class DailyService(MomoService):
-    def __init__(self, server, folder, tasks, linear, station, auto_tick=True):
+    def __init__(self, server, folder, tasks, linear, station, auto_tick=True, bound_only=False):
         super().__init__(server)
         self.set_name('/DailyService')
         self.store = DailyStore(folder)
         from storage_retention import Retention
         self.retention=Retention(self.store.folder.parent)
-        self.engine = DailyEngine(self.store, tasks, lambda: daily_writer(linear.writer), station)
+        self.engine = DailyEngine(self.store, tasks, lambda: daily_writer(linear.writer), station, bound_only=bound_only)
         self.engine.progress = self.progress
         self.linear = linear
         self.auto_tick = auto_tick
@@ -110,7 +110,7 @@ class DailyService(MomoService):
                 result=self.retention.apply(pkg['id'],pkg['cancel'].is_set)
                 self.store.put('last_retention_result',result)
                 return ok(result)
-            candidates=request_data('/LearningService/retention_artifacts')
+            candidates=request_data('/LearningService/retention_artifacts') if '/LearningService' in api.server().service_names() else []
             done={row['day'] for row in self.store.reports() if row['state']=='done'}
             candidates.extend('daily/'+day+'.md' for day in done)
             git=self.store.folder/'git'

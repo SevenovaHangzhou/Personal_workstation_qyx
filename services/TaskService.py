@@ -12,16 +12,18 @@ from services.base import MomoService, ok, require
 
 class TaskService(MomoService):
     """Single owner of task data; its lock serializes all reads and writes."""
-    def __init__(self, server):
+    def __init__(self, server, profile=None):
         super().__init__(server)
         self.set_name("/TaskService")
+        from app_profile import profile as resolve_profile
+        self.profile = resolve_profile(profile)
         self.repository = None
         self.revision = 0
 
     def init(self):
         path = api.context_get(CTX_DATA_PATH, None, CONTEXT_GROUP)
         require(isinstance(path, str), "missing task data path")
-        self.repository = JsonTaskRepository(path)
+        self.repository = JsonTaskRepository(path, self.profile.categories)
         handlers = [
             ("revision", self.get_revision, "None", "轻量查询任务变更版本和未完成数量"),
             ("snapshot", self.snapshot, "None", "返回任务、设置与数据版本快照"),
@@ -57,7 +59,11 @@ class TaskService(MomoService):
             ("remove_repository", self.remove_repository, "RepositoryIndex", "移除仓库关联"),
             ("import_issues", self.import_issues, "ImportIssues", "原子导入去重的 Linear 工作任务"),
         ]
+        work_only={"attach_issue","append_binding","remove_binding","detach_linear","append_repository","remove_repository","import_issues","acknowledge_parent"}
+        study_only={"credit_focus","set_focus_minutes"}
         for name, handler, message, description in handlers:
+            if name in work_only and not self.profile.work: continue
+            if name in study_only and not self.profile.study: continue
             self.install("/" + name, handler, message, description)
         self.alive = True
         return 0
@@ -94,6 +100,7 @@ class TaskService(MomoService):
         require(isinstance(pkg, CreateTask), "expected CreateTask")
         task = copy.deepcopy(pkg.task)
         validate_task(task)
+        require(task["category"] in self.profile.categories,"此任务分类属于另一个应用")
         self.repository.add(task)
         self.changed()
         return ok(task)
@@ -245,6 +252,7 @@ class TaskService(MomoService):
         require(isinstance(pkg, UpdateTask) and isinstance(pkg.changes, dict), "expected UpdateTask")
         require(set(pkg.changes).issubset({"title", "category", "day", "description", "next_step", "note", "issue_url", "detach_linear", "linear_target"}), "请使用对应端点修改状态、步骤、关联或计时")
         self.task(pkg.task_id)
+        require(pkg.changes.get("category", self.task(pkg.task_id)["category"]) in self.profile.categories,"此任务分类属于另一个应用")
         self.repository.update(pkg.task_id, **copy.deepcopy(pkg.changes))
         self.changed()
         return ok(self.task(pkg.task_id))
@@ -307,6 +315,7 @@ class TaskService(MomoService):
             require(isinstance(raw["title"], str) and 0 < len(raw["title"]) <= 300, "聊天标题格式无效")
             binding["label"] = raw["title"]
         task = self.task(pkg.task_id)
+        require(self.profile.work,"知序不提供聊天绑定；旧关联保留在迁移历史中")
         require(binding["kind"] != "linear" or task["category"] == "work", "只有工作任务可以关联 Linear issue")
         require(not any(b["url"] == binding["url"] for b in task["bindings"]), "这条链接已经关联过了")
         if binding["kind"] == "linear":

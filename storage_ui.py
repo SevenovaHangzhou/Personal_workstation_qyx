@@ -19,7 +19,7 @@ class UsageWorker(QThread):
 
 class StorageDialog(QDialog):
     def __init__(self,owner):
-        super().__init__(owner);self.root=owner.runtime.path.parent;self.client=getattr(owner.runtime,'daily',None);self.worker=None;self.closing=False
+        super().__init__(owner);self.root=owner.runtime.path.parent;self.client=(getattr(owner.runtime,'daily',None) or getattr(owner.runtime,'learning',None));self.worker=None;self.closing=False
         self.setWindowTitle('本地存储用量');self.resize(850,570)
         layout=box(self,margins=(24,24,24,24),spacing=12)
         layout.addWidget(label('看清本地留存','h2'))

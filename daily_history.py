@@ -29,9 +29,11 @@ def utcstamp(value):
 class HistoryIndex:
     def __init__(self, store, root=None):
         self.store = store
+        self.allowed_threads = None
         self.root = Path(root) if root else Path(os.environ.get('CODEX_HOME', str(Path.home()/'.codex')))
 
     def scan(self, cancel, earliest=None):
+        if self.allowed_threads == set(): return []
         errors = []
         threshold = utcstamp(earliest.isoformat()) if earliest else None
         # rglob includes old threads that continued today and threads moved to archives.
@@ -66,7 +68,7 @@ class HistoryIndex:
                             if record.get('type') == 'session_meta':
                                 meta = {'id': payload.get('id', ''), 'cwd': payload.get('cwd', ''),
                                         'skip': bool(payload.get('parent_thread_id') or isinstance(payload.get('source'), dict))}
-                            if meta.get('skip') or not meta.get('id'):
+                            if meta.get('skip') or not meta.get('id') or self.allowed_threads is not None and meta.get('id') not in self.allowed_threads:
                                 continue
                             if record.get('type') != 'response_item' or payload.get('type') != 'message':
                                 continue
@@ -83,6 +85,8 @@ class HistoryIndex:
                                 records.append((str(path), pos, meta['id'], stamp, role, redact(text)))
                         except (ValueError, KeyError, TypeError, AttributeError, UnicodeError):
                             file_errors.append('Codex 记录格式需核实：'+path.name+' @'+str(pos))
+                if self.allowed_threads is not None and meta.get('id') not in self.allowed_threads:
+                    continue  # Do not checkpoint unbound files; a later binding must rescan them.
                 with self.store.lock, self.store.db:
                     if reset:
                         self.store.db.execute('DELETE FROM facts WHERE source=?', (str(path),))
@@ -101,6 +105,7 @@ class HistoryIndex:
                                         (utcstamp(start.isoformat()), utcstamp(end.isoformat()))).fetchall()
         groups = {}; seen = set()
         for thread, timestamp, role, text in rows:
+            if self.allowed_threads is not None and thread not in self.allowed_threads: continue
             identity = (thread, timestamp, role, hashlib.sha256(text.encode()).hexdigest())
             if identity in seen:
                 continue

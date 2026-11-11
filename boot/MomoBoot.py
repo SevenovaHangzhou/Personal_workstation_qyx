@@ -11,8 +11,10 @@ from typedefine.TypeDefine import (APP_VERSION, CONTEXT_GROUP, CTX_DATA_PATH,
 
 
 class MomoBoot(api.YomkBoot):
-    def __init__(self, path, auto_tick=True):
+    def __init__(self, path, auto_tick=True, profile=None):
         super().__init__()
+        from app_profile import profile as resolve_profile
+        self.profile = resolve_profile(profile)
         self.path = str(path)
         self.auto_tick = auto_tick
         self.registered = []
@@ -30,14 +32,18 @@ class MomoBoot(api.YomkBoot):
 
     def start(self):
         creators = {
-            "/TaskService": lambda: TaskService(api.server()),
+            "/TaskService": lambda: TaskService(api.server(), profile=self.profile),
             "/BindingService": lambda: BindingService(api.server()),
             "/GitService": lambda: GitService(api.server()),
             "/LinearService": lambda: LinearService(api.server()),
             "/CodexService": lambda: CodexService(api.server()),
             "/FocusService": lambda: FocusService(api.server(), auto_tick=self.auto_tick),
         }
+        allowed={"/TaskService"}
+        if self.profile.work: allowed.update({"/BindingService","/GitService","/LinearService","/CodexService"})
+        if self.profile.study: allowed.add("/FocusService")
         for name, creator in creators.items():
+            if name not in allowed: continue
             service = creator()
             if api.add_service(service, name) != 0:
                 raise RuntimeError("Momo 服务启动失败：" + name)
@@ -52,6 +58,6 @@ class MomoBoot(api.YomkBoot):
         response = api.request("/TaskService/snapshot", None)
         if response.status != api.ResStatus.eOk:
             raise RuntimeError(response.msg)
-        self.focus_service.start_clock()
+        if self.focus_service: self.focus_service.start_clock()
         api.console_log_info_tag("MomoBoot", "Momo", APP_VERSION, "YomkServerPy", api.version(), "ready")
         return 0

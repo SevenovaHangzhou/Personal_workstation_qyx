@@ -122,7 +122,7 @@ def validate_task(task):
 
 
 class JsonTaskRepository:
-    def __init__(self, path):
+    def __init__(self, path, categories=None):
         self.path = Path(path)
         self.sample = True
         self.settings = {"focus_minutes": 25}
@@ -152,7 +152,9 @@ class JsonTaskRepository:
             except (ValueError, TypeError, KeyError, OSError) as exc:
                 raise ValueError("无法读取本地数据；原文件已保留。" + str(exc)) from exc
         else:
-            self.tasks = sample_tasks()
+            self.tasks = [t for t in sample_tasks() if categories is None or t["category"] in categories]
+        if categories is not None and any(t["category"] not in categories for t in self.tasks):
+            raise ValueError("数据包含另一应用的任务，请先完成拆分迁移；未修改原文件")
         if not self.path.exists() or payload.get("version") == 1:
             if self.path.exists():
                 # Never overwrite the first migration backup.

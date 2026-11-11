@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=LUMA
+Name[zh_CN]=知序 LUMA
+Comment=Learning, courses and focus
+Comment[zh_CN]=学习、专注与循序课程
+Exec=/opt/sevenova-luma/luma
+Icon=com.sevenova.Luma
+Terminal=false
+Categories=Education;
+StartupWMClass=Luma

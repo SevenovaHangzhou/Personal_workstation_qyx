@@ -7,6 +7,8 @@ from test_ui import APP
 from runtime import MomoRuntime
 from update_ui import UpdateDialog
 from test_ota import fixture
+from typedefine.TypeDefine import APP_VERSION
+parts=APP_VERSION.split("."); FUTURE=".".join(parts[:2]+[str(int(parts[2])+1)])
 
 
 class UpdateUiTests(unittest.TestCase):
@@ -16,7 +18,7 @@ class UpdateUiTests(unittest.TestCase):
     def tearDown(self):self.dialog.close();self.dialog.deleteLater();QTest.qWait(10);self.runtime.close();self.temp.cleanup()
 
     def test_close_dialog_leaves_download_in_background_and_cancel_stops_it(self):
-        started=threading.Event();self.service.source=fixture('0.10.0')[1]
+        started=threading.Event();self.service.source=fixture(FUTURE)[1]
         def stager(folder,release,event,*args):started.set();event.wait(3);raise InterruptedError()
         self.service.stager=stager;self.dialog.check.click();self.assertTrue(started.wait(2))
         self.dialog.refresh();self.assertFalse(self.dialog.check.isEnabled());self.assertTrue(self.dialog.cancel.isEnabled())
@@ -25,7 +27,7 @@ class UpdateUiTests(unittest.TestCase):
 
     def test_preferences_and_ready_cancel_are_visible_without_installing_now(self):
         self.dialog.enabled.setChecked(False);self.assertFalse(self.runtime.updates.snapshot()['enabled'])
-        self.service.source=fixture('0.10.0')[1];self.dialog.check.click();self.service.worker.join(5);self.dialog.refresh()
-        self.assertIn('0.10.0',self.dialog.versions.text());self.assertEqual(self.dialog.cancel.text(),'取消待更新')
+        self.service.source=fixture(FUTURE)[1];self.dialog.check.click();self.service.worker.join(5);self.dialog.refresh()
+        self.assertIn(FUTURE,self.dialog.versions.text());self.assertEqual(self.dialog.cancel.text(),'取消待更新')
         self.assertFalse((self.service.folder/'current-version').exists());self.dialog.cancel.click()
         self.assertIsNone(self.runtime.updates.snapshot()['ready'])

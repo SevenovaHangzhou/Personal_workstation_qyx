@@ -95,17 +95,18 @@ class OtaCoreTests(unittest.TestCase):
 
 class OtaServiceTests(unittest.TestCase):
     def setUp(self):
+        parts=APP_VERSION.split('.'); self.future='.'.join(parts[:2]+[str(int(parts[2])+1)])
         self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name)
         self.runtime=MomoRuntime(self.root/'tasks.json',auto_tick=False).start();self.service=self.runtime.update_service
-        self.release,self.source,self.files=fixture('0.10.0');self.service.source=self.source
+        self.release,self.source,self.files=fixture(self.future);self.service.source=self.source
     def tearDown(self):self.runtime.close();self.temp.cleanup()
     def check(self):self.runtime.updates.check();self.service.worker.join(timeout=5);self.assertFalse(self.service.worker.is_alive())
 
     def test_apply_only_after_full_runtime_close(self):
         self.check();state=self.runtime.updates.snapshot();self.assertEqual(state['status'],'ready')
         self.assertFalse((self.service.folder/'current-version').exists())
-        state['ready']['version']='polluted';self.assertEqual(self.runtime.updates.snapshot()['ready']['version'],'0.10.0')
-        self.runtime.close();self.assertEqual((self.service.folder/'current-version').read_text(),'0.10.0\n')
+        state['ready']['version']='polluted';self.assertEqual(self.runtime.updates.snapshot()['ready']['version'],self.future)
+        self.runtime.close();self.assertEqual((self.service.folder/'current-version').read_text(),self.future+'\n')
 
     def test_cancel_ready_prevents_exit_activation_and_disabled_preference_survives(self):
         self.check();self.runtime.updates.cancel();self.runtime.updates.configure(False);self.runtime.close()
@@ -121,7 +122,7 @@ class OtaServiceTests(unittest.TestCase):
 
     def test_rollback_does_not_reactivate_persisted_ready_version_on_exit(self):
         self.check();self.runtime.close(apply_update=False)
-        (self.service.folder/'failed-version').write_text('0.10.0\n')
+        (self.service.folder/'failed-version').write_text(self.future+'\n')
         self.runtime=MomoRuntime(self.root/'tasks.json',auto_tick=False).start();self.service=self.runtime.update_service
         self.assertIsNone(self.runtime.updates.snapshot()['ready'])
         self.runtime.close();self.assertFalse((self.service.folder/'current-version').exists())
@@ -150,7 +151,7 @@ class OtaServiceTests(unittest.TestCase):
 
     def test_automatic_failed_version_waits_for_manual_retry(self):
         self.service.folder.mkdir(parents=True,exist_ok=True)
-        (self.service.folder/'failed-version').write_text('0.10.0\n')
+        (self.service.folder/'failed-version').write_text(self.future+'\n')
         with self.service.lock:self.service.begin(True)
         self.service.worker.join(5);self.assertEqual(self.runtime.updates.snapshot()['status'],'error')
         self.check();self.assertEqual(self.runtime.updates.snapshot()['status'],'ready')

@@ -4,6 +4,7 @@ from PyQt5.QtWidgets import QDialog, QWidget, QTabWidget, QComboBox, QSlider, QL
 from display_settings import DisplayPreferences, WINDOWS
 from ui_helpers import box, label, button
 from framework import api
+from theme import APP_NAME, TAGLINE
 
 
 class PreferencesDialog(QDialog):
@@ -28,24 +29,33 @@ class PreferencesDialog(QDialog):
         self.font_size = QSlider(Qt.Horizontal); self.font_size.setRange(12,18); self.font_size.setValue(self.original.font_size)
         self.font_size.setAccessibleName('字体大小'); self.font_size.setTickPosition(QSlider.TicksBelow); self.font_size.setTickInterval(1)
         body.addWidget(self.font_size)
-        self.preview = label('星序，让每一步连成方向。\n课程正文、任务与输入文字一起调整。','h2',True); body.addWidget(self.preview)
+        self.preview = label(APP_NAME+'，'+TAGLINE+'\n任务与输入文字一起调整。','h2',True); body.addWidget(self.preview)
         body.addWidget(label('调整后立即预览；保存后下次启动沿用。取消会恢复原来的字体和窗口。','muted',True))
         body.addStretch(); body.addWidget(button('恢复默认显示','outline',callback=self.reset_display))
         page = QWidget(); body = box(page,spacing=14); self.add_page(tabs,page,'常规')
-        body.addWidget(label('一段专注时间','section')); self.duration = QComboBox()
+        self.duration = QComboBox()
+        if owner.focus: body.addWidget(label('一段专注时间','section'))
         for minutes in (15,25,45,60): self.duration.addItem(str(minutes)+' 分钟',minutes)
-        self.duration.setCurrentIndex(self.duration.findData(owner.focus_duration//60)); body.addWidget(self.duration)
+        self.duration.setCurrentIndex(self.duration.findData(owner.focus_duration//60)); body.addWidget(self.duration); self.duration.setVisible(bool(owner.focus))
         body.addWidget(button('应用更新','outline',callback=owner.open_updates))
+        body.addWidget(button('本地存储与留存','outline',callback=self.storage))
         location = QLineEdit(str(owner.tasks.path)); location.setReadOnly(True)
         body.addWidget(label('本地数据文件','section')); body.addWidget(location)
         body.addWidget(label('服务框架：YomkServerPy '+api.version(),'muted'))
-        body.addWidget(label('Ctrl N 新建 · Ctrl K 搜索\nCtrl Shift F 开始 / 暂停专注','muted',True)); body.addStretch()
+        body.addWidget(label('Ctrl N 新建 · Ctrl K 搜索'+('\nCtrl Shift F 开始 / 暂停专注' if owner.focus else ''),'muted',True)); body.addStretch()
         self.notice = label('','muted',True); layout.addWidget(self.notice)
         actions = box(horizontal=True); actions.addStretch()
         actions.addWidget(button('取消','outline',callback=self.reject)); actions.addWidget(button('保存设置','primary',callback=self.accept)); layout.addLayout(actions)
         self.font_size.valueChanged.connect(self.preview_font)
         self.window_mode.currentIndexChanged.connect(self.preview_window)
         self.size_label.setText(f'{self.font_size.value()} px')
+
+    def storage(self):
+        from storage_ui import StorageDialog
+        dialog=StorageDialog(self.owner); self.owner.storage_dialog=dialog
+        dialog.setAttribute(Qt.WA_DeleteOnClose)
+        dialog.finished.connect(lambda: setattr(self.owner,"storage_dialog",None))
+        dialog.show()
 
     @staticmethod
     def add_page(tabs, page, title):
@@ -69,7 +79,7 @@ class PreferencesDialog(QDialog):
     def accept(self):
         try:
             minutes = self.duration.currentData()
-            if minutes*60 != self.owner.focus_duration:
+            if self.owner.focus and minutes*60 != self.owner.focus_duration:
                 self.owner.focus.set_duration(minutes); self.owner.refresh_timer()
             self.display.save(self.values())
         except (ValueError,OSError) as exc:

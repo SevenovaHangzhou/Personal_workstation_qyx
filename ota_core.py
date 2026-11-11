@@ -18,6 +18,8 @@ from urllib.parse import urlsplit
 from urllib.request import Request, HTTPRedirectHandler, build_opener
 from process_environment import system_environment
 
+from app_profile import PROFILE
+SLUG=PROFILE.slug
 REPOSITORY = 'SevenovaHangzhou/Personal_workstation_qyx'
 API = 'https://api.github.com/repos/'+REPOSITORY
 VERSION = r'(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)'
@@ -71,7 +73,7 @@ class GitHubSource:
 
     def open(self, url, binary=False):
         parsed = allowed_url(url)
-        headers = {'User-Agent':'Sevenova-ORBIT-OTA', 'Accept':'application/octet-stream' if binary else 'application/vnd.github+json',
+        headers = {'User-Agent':'Sevenova-'+PROFILE.wordmark+'-OTA', 'Accept':'application/octet-stream' if binary else 'application/vnd.github+json',
                    'X-GitHub-Api-Version':'2022-11-28'}
         if self.token and parsed.hostname=='api.github.com':
             headers['Authorization'] = 'Bearer '+self.token
@@ -115,8 +117,8 @@ class GitHubSource:
 
 
 def package_names(version):
-    if platform.system()=='Windows':return 'windows-manifest.json','WINDOWS-SHA256SUMS',f'orbit-{version}-windows-x86_64.zip'
-    return 'manifest.json','SHA256SUMS',f'orbit-{version}-linux-x86_64.tar.gz'
+    if platform.system()=='Windows':return ('luma-windows-manifest.json' if SLUG=='luma' else 'windows-manifest.json'),('LUMA-WINDOWS-SHA256SUMS' if SLUG=='luma' else 'WINDOWS-SHA256SUMS'),f'{SLUG}-{version}-windows-x86_64.zip'
+    return ('luma-manifest.json' if SLUG=='luma' else 'manifest.json'),('LUMA-SHA256SUMS' if SLUG=='luma' else 'SHA256SUMS'),f'{SLUG}-{version}-linux-x86_64.tar.gz'
 
 
 def release_assets(release):
@@ -146,6 +148,8 @@ def validate_manifest(manifest, sums, version, asset):
     expected='windows-x86_64' if platform.system()=='Windows' else 'linux-x86_64'
     if not isinstance(manifest,dict) or manifest.get('version')!=version or manifest.get('platform')!=expected:
         raise ValueError('更新清单的版本或平台不匹配')
+    if PROFILE.key!='combined' and manifest.get('app_id')!=PROFILE.app_id:
+        raise ValueError('更新包属于另一个应用，已停止安装')
     if platform.system()=='Windows':
         if platform.machine().lower() not in ('amd64','x86_64') or manifest.get('minimum_windows')!='10':raise ValueError('更新包需要 Windows 10/11 x64')
     else:
@@ -170,18 +174,18 @@ def extract_package(archive_path, destination, event):
         total=0; seen=set()
         for member in archive:
             cancelled(event); name=PurePosixPath(member.name)
-            if (name.is_absolute() or '..' in name.parts or not name.parts or name.parts[0]!='orbit'
+            if (name.is_absolute() or '..' in name.parts or not name.parts or name.parts[0]!=SLUG
                     or '\\' in member.name or member.name in seen or len(seen)>=20000
                     or not (member.isfile() or member.isdir() or member.issym() or member.islnk())):
                 raise ValueError('更新包包含不安全或重复的路径')
             seen.add(member.name); total+=member.size
             if total>2*1024**3: raise ValueError('更新包展开后过大')
             archive.extract(member,destination,filter='data')
-    root=Path(destination)/'orbit'
+    root=Path(destination)/SLUG
     for path in root.rglob('*'):
         if path.is_symlink() and not path.resolve(strict=True).is_relative_to(root.resolve()):
             raise ValueError('更新包链接指向应用目录之外')
-    for name in ('orbit','orbit-bin'):
+    for name in (SLUG,SLUG+'-bin'):
         path=root/name
         if path.is_symlink() or not path.is_file() or not os.access(path,os.X_OK):
             raise ValueError('更新包缺少可执行的 '+name)
@@ -237,15 +241,16 @@ def stage_release(folder, release, event, progress, source=None):
         cancelled(event); progress('verifying',package['size'],package['size'])
         root=extract_package(archive,temporary/'extracted',event)
         probe_home=temporary/'probe';probe_home.mkdir()
-        probe(root/('orbit-bin.exe' if platform.system()=='Windows' else 'orbit-bin'),version,probe_home,event);cancelled(event)
+        probe(root/(SLUG+'-bin.exe' if platform.system()=='Windows' else SLUG+'-bin'),version,probe_home,event);cancelled(event)
         stamp=dict(version=version,sha256=package['digest'][7:])
+        if PROFILE.key!='combined': stamp['app_id']=PROFILE.app_id
         atomic_text(root/'ota-install.json',json.dumps(stamp))
         target=folder/'releases'/version
         target.parent.mkdir(exist_ok=True,mode=0o700)
         if target.exists():
             if target.is_symlink() or json.loads((target/'ota-install.json').read_text())!=stamp:
                 raise ValueError('同版本更新目录已存在且校验不同，未覆盖已有文件')
-            probe(target/('orbit-bin.exe' if platform.system()=='Windows' else 'orbit-bin'),version,probe_home,event)
+            probe(target/(SLUG+'-bin.exe' if platform.system()=='Windows' else SLUG+'-bin'),version,probe_home,event)
         else:os.replace(root,target)
         return stamp
 
@@ -256,7 +261,7 @@ def extract_windows_package(archive_path,destination,event):
     with zipfile.ZipFile(archive_path) as archive:
         for member in archive.infolist():
             cancelled(event);path=PurePosixPath(member.filename);key=member.filename.casefold()
-            if (path.is_absolute() or not path.parts or path.parts[0]!='orbit' or '..' in path.parts
+            if (path.is_absolute() or not path.parts or path.parts[0]!=SLUG or '..' in path.parts
                 or '\\' in member.filename or ':' in member.filename or key in seen or len(seen)>=20000
                 or any(part.rstrip(' .')!=part or part.split('.')[0].upper() in reserved for part in path.parts)
                 or (member.external_attr>>16)&0o170000==0o120000):raise ValueError('Windows 更新包包含不安全路径')
@@ -267,6 +272,6 @@ def extract_windows_package(archive_path,destination,event):
             else:
                 target.parent.mkdir(parents=True,exist_ok=True)
                 with archive.open(member) as source,target.open('xb') as output:shutil.copyfileobj(source,output)
-    root=destination/'orbit'
-    if any(not (root/name).is_file() for name in ('orbit.exe','orbit-bin.exe')):raise ValueError('Windows 更新包缺少启动文件')
+    root=destination/SLUG
+    if any(not (root/name).is_file() for name in (SLUG+'.exe',SLUG+'-bin.exe')):raise ValueError('Windows 更新包缺少启动文件')
     return root

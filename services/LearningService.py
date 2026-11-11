@@ -71,6 +71,8 @@ class LearningService(MomoService):
         for endpoint in ('revision','snapshot','catalog','bind','start','regenerate','save_feedback','cancel','course','answer',
                          'tutor_snapshot','tutor_ask','tutor_cancel','study_state','save_study','retention_artifacts'):
             self.install('/'+endpoint,getattr(self,endpoint),'dict','学习课程、后台生成与作答：'+endpoint)
+        self.install_func('/retention_preview',self.retention_preview,'dict','预览已结束的课程和答疑原始输出')
+        self.install_func('/retention_apply',self.retention_apply,'dict','按本次确认清单移入系统回收站')
         self.alive = True
         return 0
 
@@ -292,6 +294,29 @@ class LearningService(MomoService):
             if not lesson: return ok({})
             if lesson['revision']!=value.get('lesson_revision'): value={**value,'scroll_ratio':0}
         return ok(value)
+
+    def retention_preview(self,pkg):
+        return self.retention_request(pkg)
+
+    def retention_apply(self,pkg):
+        return self.retention_request(pkg,True)
+
+    def retention_request(self,pkg,apply=False):
+        try:
+            require(isinstance(pkg,dict) and set(pkg)==({'id','cancel'} if apply else {'cancel'}),'无效留存请求')
+            require(isinstance(pkg['cancel'],threading.Event),'无效取消标志')
+            from storage_retention import Retention
+            with self.lock:
+                require(self.alive,'学习服务已停止')
+                if not hasattr(self,'retention'): self.retention=Retention(self.folder.parent)
+                candidates=self.retention_artifacts({}).data if not apply else []
+            if apply:
+                require(isinstance(pkg['id'],str),'无效确认清单')
+                return ok(self.retention.apply(pkg['id'],pkg['cancel'].is_set))
+            return ok(self.retention.preview(candidates,pkg['cancel'].is_set))
+        except Exception as exc:
+            from framework import api
+            return api.YomkResponse(api.ResStatus.eNo,str(exc))
 
     def retention_artifacts(self,pkg):
         require(pkg is None,'expected None')

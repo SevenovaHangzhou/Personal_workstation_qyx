@@ -2,10 +2,11 @@
 from pathlib import Path
 import re
 
-APP_NAME = "星序"
-APP_WORDMARK = "ORBIT"
-APP_DISPLAY_NAME = "星序 / ORBIT"
-TAGLINE = "让每一步，连成方向。"
+from app_profile import PROFILE
+APP_NAME = PROFILE.name
+APP_WORDMARK = PROFILE.wordmark
+APP_DISPLAY_NAME = PROFILE.display_name
+TAGLINE = "让知识，循序生长。" if PROFILE.key=="study" else "让每一步，连成方向。"
 
 PALETTE = {
     "canvas": "#f5f7fa", "surface": "#ffffff", "ink": "#273d52",
@@ -119,6 +120,10 @@ QLabel#h1[compact="true"] { font-size: 22px; }
 QLabel[textRole="taskTitle"] { font-size: 14px; }
 QLabel[textRole="small"] { font-size: 11px; }
 """
+
+if PROFILE.key=="study":
+    PALETTE.update(primary="#776393",accent="#77a28b")
+    STYLE=STYLE.replace("#426c83","#776393").replace("#c89e66","#77a28b")
 
 def scaled_style(font_size=13):
     return re.sub(r'(font-size:\s*)([0-9.]+)px',

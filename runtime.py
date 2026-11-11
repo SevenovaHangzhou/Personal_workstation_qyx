@@ -17,15 +17,17 @@ class MomoRuntime:
     _lock = threading.Lock()
     _active = False
 
-    def __init__(self, path, auto_tick=True, graph_port=None):
+    def __init__(self, path, auto_tick=True, graph_port=None, profile=None):
         self.path = Path(path)
-        self.boot = MomoBoot(self.path, auto_tick)
+        from app_profile import profile as resolve_profile
+        self.profile = resolve_profile(profile)
+        self.boot = MomoBoot(self.path, auto_tick, self.profile)
         self.tasks = TaskClient()
-        self.focus = FocusClient()
-        self.linear = LinearClient()
-        self.codex = CodexClient()
-        self.daily = DailyClient()
-        self.learning = LearningClient()
+        self.focus = FocusClient() if self.profile.study else None
+        self.linear = LinearClient() if self.profile.work else None
+        self.codex = CodexClient() if self.profile.work else None
+        self.daily = DailyClient() if self.profile.work else None
+        self.learning = LearningClient() if self.profile.study else None
         self.updates = UpdateClient()
         self.started = False
         self.station = None
@@ -38,7 +40,7 @@ class MomoRuntime:
     def start(self):
         with self._lock:
             if self._active:
-                raise RuntimeError("同一进程只能运行一个星序空间")
+                raise RuntimeError("同一进程只能运行一个应用空间")
             if api.init(2) is None:
                 raise RuntimeError("YomkServerPy 已关闭；请在新进程中启动")
             type(self)._active = True
@@ -51,25 +53,38 @@ class MomoRuntime:
             try:
                 lock_file(self._data_lock)
             except OSError:
-                raise DataSpaceInUse("此星序数据空间已在运行，请打开已有窗口") from None
+                raise DataSpaceInUse("此"+self.profile.name+"数据空间已在运行，请打开已有窗口") from None
+            if self.profile.key!='combined':
+                import json
+                marker=self.path.parent/'.application.json'
+                if marker.exists() and json.loads(marker.read_text()).get('app_id')!=self.profile.app_id:
+                    raise ValueError('该数据空间属于另一个应用，未修改数据')
+                split_marker=self.path.parent/'.product-split.json'
+                if split_marker.exists() and json.loads(split_marker.read_text()).get('product')!=self.profile.key:
+                    raise ValueError('该数据空间属于另一个应用，未修改数据')
             if self.graph: self.graph.attach()
             with caller("@Boot"):
                 if api.boot(self.boot) != 0:
-                    raise RuntimeError("星序服务启动失败")
-            from station_backend import EmbeddedStation
-            self.station = EmbeddedStation(self.path.parent / "station", self.tasks)
-            from services.DailyService import DailyService
-            self.daily_service = DailyService(api.server(), self.path.parent / "daily", self.tasks,
-                self.boot.linear_service, self.station, self.boot.auto_tick)
-            if api.add_service(self.daily_service, "/DailyService") != 0:
-                raise RuntimeError("日报服务启动失败")
-            self.boot.registered.append("/DailyService")
-            self.daily_service.start_clock()
-            from services.LearningService import LearningService
-            self.learning_service = LearningService(api.server(), self.path.parent / "learning", self.tasks)
-            if api.add_service(self.learning_service, "/LearningService") != 0:
-                raise RuntimeError("学习服务启动失败")
-            self.boot.registered.append("/LearningService")
+                    raise RuntimeError(self.profile.name+"服务启动失败")
+            if self.profile.key!='combined' and not marker.exists():
+                from split_migration import write_json
+                write_json(marker,{'app_id':self.profile.app_id,'product':self.profile.key})
+            if self.profile.work:
+                from station_backend import EmbeddedStation
+                self.station = EmbeddedStation(self.path.parent / "station", self.tasks)
+                from services.DailyService import DailyService
+                self.daily_service = DailyService(api.server(), self.path.parent / "daily", self.tasks,
+                    self.boot.linear_service, self.station, self.boot.auto_tick, bound_only=self.profile.key=="work")
+                if api.add_service(self.daily_service, "/DailyService") != 0:
+                    raise RuntimeError("日报服务启动失败")
+                self.boot.registered.append("/DailyService")
+                self.daily_service.start_clock()
+            if self.profile.study:
+                from services.LearningService import LearningService
+                self.learning_service = LearningService(api.server(), self.path.parent / "learning", self.tasks)
+                if api.add_service(self.learning_service, "/LearningService") != 0:
+                    raise RuntimeError("学习服务启动失败")
+                self.boot.registered.append("/LearningService")
             from services.UpdateService import UpdateService
             self.update_service = UpdateService(api.server(), self.path.parent/'updates', self.boot.auto_tick)
             if api.add_service(self.update_service, '/UpdateService') != 0:

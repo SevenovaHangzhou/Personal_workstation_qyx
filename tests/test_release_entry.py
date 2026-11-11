@@ -28,7 +28,8 @@ class ReleaseEntryTests(unittest.TestCase):
             root = Path(temporary); result = self.probe('--self-test', root=root)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn('"model_called": false', result.stdout)
-            self.assertIn('course-14-chapters', result.stdout)
+            self.assertIn('product-services', result.stdout)
+            self.assertIn('com.sevenova.Orbit', result.stdout)
             self.assertFalse(list(root.rglob('tasks.json')))
 
     def test_selftest_rejects_explicit_user_data_before_creating_it(self):
@@ -42,7 +43,7 @@ class ReleaseEntryTests(unittest.TestCase):
             root = Path(temporary)
             result = self.probe('--self-test', '--graph', '--graph-port', '0', root=root)
             self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
-            self.assertIn('graph-9-business-5-builtin', result.stdout)
+            self.assertIn('graph-product-inventory', result.stdout)
             self.assertIn('graph-http-assets', result.stdout)
             self.assertIn('graph-query-does-not-pollute', result.stdout)
             self.assertIn('"model_called": false', result.stdout)

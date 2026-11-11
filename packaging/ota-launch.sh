@@ -13,10 +13,9 @@ orbit_ota_pointer() {
 orbit_ota_launch() {
     local orbit_base="$1"; shift
     [[ "${ORBIT_SKIP_OTA:-0}" != 1 ]] || return 0
-    local orbit_arg orbit_expect=0 orbit_data="${XDG_DATA_HOME:-$HOME/.local/share}/Sevenova/Orbit"
-    if [[ ! -d "$orbit_data" && -d "${XDG_DATA_HOME:-$HOME/.local/share}/MomoLocal/Momo" ]]; then
-        orbit_data="${XDG_DATA_HOME:-$HOME/.local/share}/MomoLocal/Momo"
-    fi
+    local orbit_slug=orbit orbit_folder=OrbitWork
+    if [[ "${ORBIT_APP_PROFILE:-work}" == study ]]; then orbit_slug=luma; orbit_folder=Luma; fi
+    local orbit_arg orbit_expect=0 orbit_data="${XDG_DATA_HOME:-$HOME/.local/share}/Sevenova/$orbit_folder"
     for orbit_arg in "$@"; do
         [[ "$orbit_arg" != --self-test ]] || return 0
         if (( orbit_expect )); then orbit_data="$orbit_arg"; orbit_expect=0; continue; fi
@@ -27,9 +26,9 @@ orbit_ota_launch() {
     IFS= read -r orbit_version < "$orbit_updates/current-version" || return 0
     orbit_ota_newer "$orbit_version" "$orbit_base" || return 0
     orbit_target="$orbit_updates/releases/$orbit_version"
-    [[ ! -L "$orbit_target" && -x "$orbit_target/orbit" && -x "$orbit_target/orbit-bin" && -f "$orbit_target/ota-install.json" ]] || return 0
+    [[ ! -L "$orbit_target" && -x "$orbit_target/$orbit_slug" && -x "$orbit_target/$orbit_slug-bin" && -f "$orbit_target/ota-install.json" ]] || return 0
     orbit_health="$(mktemp "$orbit_updates/launch-health.XXXXXX")" || return 0
-    if ORBIT_OTA_HEALTH_FILE="$orbit_health" "$orbit_target/orbit" "$@"; then
+    if ORBIT_OTA_HEALTH_FILE="$orbit_health" "$orbit_target/$orbit_slug" "$@"; then
         rm -f -- "$orbit_health"; exit 0
     else
         orbit_status=$?
@@ -45,10 +44,10 @@ orbit_ota_launch() {
     if [[ -f "$orbit_updates/previous-version" && ! -L "$orbit_updates/previous-version" ]]; then
         IFS= read -r orbit_previous < "$orbit_updates/previous-version" || orbit_previous=''
     fi
-    if orbit_ota_newer "$orbit_previous" "$orbit_base" && [[ "$orbit_previous" != "$orbit_version" && -x "$orbit_updates/releases/$orbit_previous/orbit" ]]; then
+    if orbit_ota_newer "$orbit_previous" "$orbit_base" && [[ "$orbit_previous" != "$orbit_version" && -x "$orbit_updates/releases/$orbit_previous/$orbit_slug" ]]; then
         orbit_ota_pointer "$orbit_updates" current-version "$orbit_previous" || return 0
         # A failed fallback returns to the original installation, without looping.
-        if ORBIT_SKIP_OTA=1 "$orbit_updates/releases/$orbit_previous/orbit" "$@"; then exit 0; fi
+        if ORBIT_SKIP_OTA=1 "$orbit_updates/releases/$orbit_previous/$orbit_slug" "$@"; then exit 0; fi
     fi
     rm -f -- "$orbit_updates/current-version"
     return 0

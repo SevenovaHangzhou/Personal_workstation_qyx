@@ -18,6 +18,12 @@ import tempfile
 from datetime import datetime, timezone
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT))
+from app_profile import profile
+PROFILE=profile(os.environ.get("ORBIT_APP_PROFILE","work"))
+SLUG=PROFILE.slug
+MANIFEST="luma-manifest.json" if SLUG=="luma" else "manifest.json"
+SUMS="LUMA-SHA256SUMS" if SLUG=="luma" else "SHA256SUMS"
 RUNTIME_PACKAGES = ['PyQt5', 'PyQt5-Qt5', 'PyQt5-sip', 'readerwriterlock',
                     'typing_extensions', 'starlette', 'anyio', 'idna']
 
@@ -70,14 +76,14 @@ def main():
     release_version = version()
     output = args.output.resolve(); work = args.work_dir.resolve()
     output.mkdir(parents=True, exist_ok=True); work.mkdir(parents=True, exist_ok=True)
-    stem = f'orbit-{release_version}-linux-x86_64'
-    tar_path = output/(stem+'.tar.gz'); deb_path = output/f'sevenova-orbit_{release_version}_amd64.deb'
-    if any(p.exists() for p in (tar_path, deb_path, output/'manifest.json')):
+    stem = f'{SLUG}-{release_version}-linux-x86_64'
+    tar_path = output/(stem+'.tar.gz'); deb_path = output/f'sevenova-{SLUG}_{release_version}_amd64.deb'
+    if any(p.exists() for p in (tar_path, deb_path, output/MANIFEST)):
         parser.error('Release files already exist. Use a new output directory to avoid replacing a published build.')
     # ASCII import alias fixes PyQt5 wheels whose Qt prefix loses Unicode paths.
     # Reuse the installed local dependencies; do not download a second runtime.
     import PyQt5
-    env = dict(os.environ); env['PYINSTALLER_CONFIG_DIR'] = str(work/'cache')
+    env = dict(os.environ); env['ORBIT_APP_PROFILE']=PROFILE.key; env['PYINSTALLER_CONFIG_DIR'] = str(work/'cache')
     with tempfile.TemporaryDirectory(prefix='orbit-build-imports-') as alias:
         site = Path(alias)/'site'; site.symlink_to(Path(PyQt5.__file__).resolve().parent.parent, target_is_directory=True)
         env['PYTHONPATH'] = str(site) + (os.pathsep+env['PYTHONPATH'] if env.get('PYTHONPATH') else '')
@@ -85,20 +91,15 @@ def main():
             run([sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean',
                  '--distpath', str(work/'dist'), '--workpath', str(work/'pyinstaller'),
                  str(ROOT/'packaging/orbit.spec')], cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
-    bundle = work/'dist/orbit'
-    shutil.copy2(ROOT/'packaging/launch.sh', bundle/'orbit'); (bundle/'orbit').chmod(0o755)
+    bundle = work/'dist'/SLUG
+    shutil.copy2(ROOT/'packaging/launch.sh', bundle/SLUG); (bundle/SLUG).chmod(0o755)
     shutil.copy2(ROOT/'packaging/ota-launch.sh', bundle/'ota-launch.sh')
     (bundle/'VERSION').write_text(release_version+'\n')
-    shutil.copy2(ROOT/'assets/orbit.svg', bundle/'orbit.svg')
+    (bundle/'PRODUCT').write_text(PROFILE.key+'\n')
+    shutil.copy2(ROOT/'assets'/(SLUG+'.svg'), bundle/'orbit.svg')
     versions = add_notices(bundle)
-    (bundle/'README.txt').write_text(
-        f'星序 ORBIT {release_version}\n\n运行 ./orbit；无需安装 Python。\n'
-        '需要 Linux x86_64、glibc 2.35+ 和桌面图形环境。\n'
-        'Codex CLI、Git 及其配置使用系统现有安装，登录不包含在包中。\n'
-        '默认数据 ~/.local/share/Sevenova/Orbit；首次启动自动迁移旧数据并兼容旧路径。关闭主窗口会驻留托盘。\n'
-        '启动日志：${XDG_STATE_HOME:-~/.local/state}/orbit/startup.log\n'
-        '退出：托盘菜单“停止执行并退出”。\n'
-        '离线自检：QT_QPA_PLATFORM=offscreen ./orbit --self-test\n')
+    (bundle/'README.txt').write_text(PROFILE.display_name+' '+release_version+'\n运行 ./'+SLUG+'；无需安装 Python。\n'
+        +'数据：~/.local/share/Sevenova/'+PROFILE.data_name+'\n关闭窗口驻留托盘；从托盘完整退出后更新生效。\n',encoding='utf-8')
     probe_env = dict(os.environ); probe_env['QT_QPA_PLATFORM'] = 'offscreen'
     # Probe the frozen binary from a different working directory, without source imports.
     for key in ('PYTHONPATH', 'PYTHONHOME', 'YOMK_PREFIX_PATH'):
@@ -110,32 +111,32 @@ def main():
         probe_env['XDG_STATE_HOME'] = str(Path(temporary)/'state')
         for switches, label in [(['--version'], 'version'), (['--self-test'], 'self-test'),
                                 (['--self-test', '--graph', '--graph-port', '0'], 'graph-self-test')]:
-            result = subprocess.run([str(bundle/'orbit'), *switches], cwd=temporary, env=probe_env,
+            result = subprocess.run([str(bundle/SLUG), *switches], cwd=temporary, env=probe_env,
                                     capture_output=True, text=True, timeout=60)
             (work/(label+'.log')).write_text(result.stdout+result.stderr)
             result.check_returncode()
             if label == 'version' and release_version not in result.stdout:
                 raise RuntimeError('Frozen version check failed')
-        run([str(bundle/'orbit-bin'), '--data-dir', str(Path(temporary)/'screenshot-data'),
+        run([str(bundle/(SLUG+'-bin')), '--data-dir', str(Path(temporary)/'screenshot-data'),
              '--screenshot', str(work/'application.png')], cwd=temporary, env=probe_env,
             capture_output=True, timeout=60)
     # A fixed timestamp/order makes the tar envelope stable for identical inputs.
     with tar_path.open('wb') as raw, gzip.GzipFile(filename='', mode='wb', fileobj=raw, mtime=0) as compressed:
         with tarfile.open(fileobj=compressed, mode='w') as archive:
-            archive.add(bundle, arcname='orbit', filter=normalized)
+            archive.add(bundle, arcname=SLUG, filter=normalized)
     deb_root = work/'deb'
     if deb_root.exists():
         shutil.rmtree(deb_root)
     (deb_root/'DEBIAN').mkdir(parents=True)
-    app_dir = deb_root/'opt/sevenova-orbit'; shutil.copytree(bundle, app_dir)
-    (deb_root/'usr/bin').mkdir(parents=True); (deb_root/'usr/bin/orbit').symlink_to('/opt/sevenova-orbit/orbit')
+    app_dir = deb_root/('opt/sevenova-'+SLUG); shutil.copytree(bundle, app_dir)
+    (deb_root/'usr/bin').mkdir(parents=True); (deb_root/('usr/bin/'+SLUG)).symlink_to('/opt/sevenova-'+SLUG+'/'+SLUG)
     desktop = deb_root/'usr/share/applications'; desktop.mkdir(parents=True)
-    shutil.copy2(ROOT/'packaging/com.sevenova.Orbit.desktop', desktop)
+    shutil.copy2(ROOT/'packaging'/(PROFILE.app_id+'.desktop'), desktop)
     icons = deb_root/'usr/share/icons/hicolor/scalable/apps'; icons.mkdir(parents=True)
-    shutil.copy2(ROOT/'assets/orbit.svg', icons/'com.sevenova.Orbit.svg')
+    shutil.copy2(ROOT/'assets'/(SLUG+'.svg'), icons/(PROFILE.app_id+'.svg'))
     size = sum(p.stat().st_size for p in bundle.rglob('*') if p.is_file())//1024
     (deb_root/'DEBIAN/control').write_text(
-        f'Package: sevenova-orbit\nVersion: {release_version}\nArchitecture: amd64\nMaintainer: Sevenova\n'
+        f'Package: sevenova-{SLUG}\nVersion: {release_version}\nArchitecture: amd64\nMaintainer: Sevenova\n'
         f'Installed-Size: {size}\nSection: utils\nPriority: optional\n'
         'Depends: libc6 (>= 2.35), libglib2.0-0, libgl1, libegl1, libx11-6, libxcb1, libxkbcommon-x11-0, libfontconfig1, git, libglib2.0-bin\n'
         'Recommends: fonts-noto-cjk\nHomepage: https://github.com/SevenovaHangzhou/Personal_workstation_qyx\n'
@@ -147,8 +148,8 @@ def main():
         with tarfile.open(tar_path) as archive:
             archive.extractall(extracted/'portable', filter='data')
         run(['dpkg-deb', '--extract', str(deb_path), str(extracted/'debian')])
-        for name, binary in [('portable', extracted/'portable/orbit/orbit'),
-                             ('debian', extracted/'debian/opt/sevenova-orbit/orbit')]:
+        for name, binary in [('portable', extracted/'portable'/SLUG/SLUG),
+                             ('debian', extracted/('debian/opt/sevenova-'+SLUG)/SLUG)]:
             result = run([str(binary), '--self-test'], cwd=temporary, env=probe_env,
                          capture_output=True, text=True, timeout=60)
             (work/(name+'-self-test.log')).write_text(result.stdout+result.stderr)
@@ -156,24 +157,24 @@ def main():
                          env=probe_env, capture_output=True, text=True, timeout=60)
             (work/(name+'-graph-self-test.log')).write_text(result.stdout+result.stderr)
         # Reproduce /usr/bin/orbit without installing into the host system.
-        entry = extracted/'command-bin/orbit'; entry.parent.mkdir()
-        entry.symlink_to(extracted/'debian/opt/sevenova-orbit/orbit')
+        entry = extracted/'command-bin'/SLUG; entry.parent.mkdir()
+        entry.symlink_to(extracted/('debian/opt/sevenova-'+SLUG)/SLUG)
         result = run([str(entry), '--self-test'], cwd=temporary, env=probe_env,
                      capture_output=True, text=True, timeout=60)
         (work/'debian-command-self-test.log').write_text(result.stdout+result.stderr)
     artifacts = [dict(file=p.name, bytes=p.stat().st_size, sha256=hashlib.sha256(p.read_bytes()).hexdigest()) for p in (tar_path, deb_path)]
     revision = run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
-    manifest = dict(version=release_version, platform='linux-x86_64', minimum_glibc='2.35',
+    manifest = dict(app_id=PROFILE.app_id,product=PROFILE.key,version=release_version, platform='linux-x86_64', minimum_glibc='2.35',
                     source_commit=revision, built_at=datetime.now(timezone.utc).isoformat(),
                     python=platform.python_version(), pyinstaller=metadata.version('pyinstaller'),
                     runtime_packages=versions, artifacts=artifacts,
                     verification=['frozen --version', 'frozen --self-test', 'offscreen startup/screenshot',
                                   'extracted portable --self-test', 'extracted Debian --self-test',
                                   'Debian-style command symlink --self-test',
-                                  'frozen and extracted portable/Debian --self-test --graph (assets + 14 services)'],
+                                  'frozen and extracted portable/Debian --self-test --graph (assets + product services)'],
                     user_data_included=False, codex_credentials_included=False)
-    (output/'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2)+'\n')
-    (output/'SHA256SUMS').write_text(''.join(f'{row["sha256"]}  {row["file"]}\n' for row in artifacts))
+    (output/MANIFEST).write_text(json.dumps(manifest, ensure_ascii=False, indent=2)+'\n')
+    (output/SUMS).write_text(''.join(f'{row["sha256"]}  {row["file"]}\n' for row in artifacts))
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
 
 

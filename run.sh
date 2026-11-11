@@ -3,6 +3,7 @@ set -euo pipefail
 MOMO_ROOT="$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")"
 MOMO_LOG_DIR="${MOMO_LOG_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/orbit}"
 MOMO_LOG_FILE="$MOMO_LOG_DIR/startup.log"
+export ORBIT_APP_PROFILE=work
 source "$MOMO_ROOT/packaging/ota-launch.sh"
 orbit_ota_launch "$(sed -n 's/^APP_VERSION = "\([0-9][0-9.]*\)"$/\1/p' "$MOMO_ROOT/typedefine/TypeDefine.py")" "$@"
 
@@ -60,4 +61,4 @@ fi
 printf 'Python: %s\n' "$MOMO_INTERPRETER"
 "$MOMO_INTERPRETER" -c 'import sys; sys.exit(0 if sys.version_info >= (3,11) else "当前解释器低于 Python 3.11，请创建 .venv 或更正 MOMO_PYTHON")'
 "$MOMO_INTERPRETER" "$MOMO_ROOT/check_env.py" --quiet
-"$MOMO_INTERPRETER" "$MOMO_ROOT/main.py" "$@"
+"$MOMO_INTERPRETER" "$MOMO_ROOT/orbit.py" "$@"

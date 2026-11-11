@@ -33,7 +33,9 @@ class TaskClient:
         return call("/TaskService/get", TaskId(task_id)) if task_id else None
 
     def add(self, task): return call("/TaskService/create", CreateTask(task))
-    def delete(self, task_id): return call("/FocusService/delete_task", TaskId(task_id))
+    def delete(self, task_id):
+        route="/FocusService/delete_task" if "/FocusService" in api.server().service_names() else "/TaskService/delete"
+        return call(route, TaskId(task_id))
     def reorder(self, task_ids): return call("/TaskService/reorder", TaskOrder(task_ids))
     def check_merge(self, task_id, parent_id, mode="child"): return call("/TaskService/check_merge", MergeTask(task_id, parent_id, mode))
     def merge(self, task_id, parent_id, mode="child"): return call("/TaskService/merge", MergeTask(task_id, parent_id, mode))
@@ -107,6 +109,8 @@ class DailyClient:
 
 
 class LearningClient:
+    def retention_preview(self,cancel): return call("/LearningService/retention_preview",{"cancel":cancel})
+    def retention_apply(self,identifier,cancel): return call("/LearningService/retention_apply",{"id":identifier,"cancel":cancel})
     def revision(self): return call("/LearningService/revision", {})
     def snapshot(self, task_id=None): return call('/LearningService/snapshot', {'task_id':task_id})
     def catalog(self): return call('/LearningService/catalog', {})

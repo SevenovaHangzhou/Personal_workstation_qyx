@@ -6,6 +6,8 @@ import tempfile
 import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
+from typedefine.TypeDefine import APP_VERSION
+parts=APP_VERSION.split("."); FUTURE=".".join(parts[:2]+[str(int(parts[2])+1)])
 
 
 class LauncherTests(unittest.TestCase):
@@ -15,6 +17,7 @@ class LauncherTests(unittest.TestCase):
         self.updates=self.data/'updates';self.updates.mkdir(parents=True)
         shutil.copy2(ROOT/'packaging/launch.sh',self.base/'orbit');(self.base/'orbit').chmod(0o755)
         shutil.copy2(ROOT/'packaging/ota-launch.sh',self.base/'ota-launch.sh')
+        (self.base/'PRODUCT').write_text('work\n')
         (self.base/'VERSION').write_text('0.9.1\n');self.script(self.base/'orbit-bin','echo BASE')
     def tearDown(self):self.temp.cleanup()
     def script(self,path,body):path.write_text('#!/bin/bash\n'+body+'\n');path.chmod(0o755)
@@ -30,7 +33,7 @@ class LauncherTests(unittest.TestCase):
                               capture_output=True,text=True,timeout=5,env=env,cwd=self.root)
 
     def test_new_version_is_launched_from_both_source_and_packaged_entry(self):
-        self.candidate('0.10.0','echo UPDATED')
+        self.candidate(FUTURE,'echo UPDATED')
         for source in (True,False):
             result=self.launch(source);self.assertEqual(result.returncode,0,result.stderr);self.assertEqual(result.stdout.strip(),'UPDATED')
 
@@ -38,12 +41,17 @@ class LauncherTests(unittest.TestCase):
         self.candidate('0.9.0','echo OLD');result=self.launch()
         self.assertEqual(result.returncode,0,result.stderr);self.assertIn('BASE',result.stdout);self.assertNotIn('OLD',result.stdout)
 
-    def test_default_branded_and_legacy_data_locations_find_updates(self):
-        for label,relative in [('branded','Sevenova/Orbit'),('legacy','MomoLocal/Momo')]:
-            with self.subTest(location=label):
-                data_home=self.root/label
-                self.updates=data_home/relative/'updates'
-                self.candidate('0.10.0','echo UPDATED')
+    def test_each_product_uses_its_own_default_updates(self):
+        for product,slug,folder in [('work','orbit','OrbitWork'),('study','luma','Luma')]:
+            with self.subTest(product=product):
+                data_home=self.root/product
+                self.updates=data_home/'Sevenova'/folder/'updates'
+                self.candidate(FUTURE,'echo UPDATED')
+                overlay=self.updates/'releases'/FUTURE
+                if slug=='luma':
+                    (overlay/'orbit').rename(overlay/'luma'); (overlay/'orbit-bin').rename(overlay/'luma-bin')
+                (self.base/'PRODUCT').write_text(product+'\n')
+                self.script(self.base/(slug+'-bin'),'echo BASE')
                 env=dict(os.environ,HOME=str(self.root),XDG_DATA_HOME=str(data_home),XDG_STATE_HOME=str(self.root/'state'))
                 env.pop('ORBIT_SKIP_OTA',None);env.pop('ORBIT_OTA_HEALTH_FILE',None)
                 result=subprocess.run([str(self.base/'orbit'),'--version'],capture_output=True,text=True,timeout=5,env=env,cwd=self.root)
@@ -52,11 +60,11 @@ class LauncherTests(unittest.TestCase):
     def test_debian_style_symlink_resolves_base_and_updated_application(self):
         entry=self.root/'bin/orbit';entry.parent.mkdir();entry.symlink_to(self.base/'orbit')
         result=self.launch(entry=entry);self.assertEqual(result.returncode,0,result.stderr);self.assertIn('BASE',result.stdout)
-        self.candidate('0.10.0','echo UPDATED')
+        self.candidate(FUTURE,'echo UPDATED')
         result=self.launch(entry=entry);self.assertEqual(result.returncode,0,result.stderr);self.assertEqual(result.stdout.strip(),'UPDATED')
 
     def test_source_symlink_can_load_prepared_application(self):
-        entry=self.root/'start';entry.symlink_to(ROOT/'run.sh');self.candidate('0.10.0','echo UPDATED')
+        entry=self.root/'start';entry.symlink_to(ROOT/'run.sh');self.candidate(FUTURE,'echo UPDATED')
         result=self.launch(entry=entry);self.assertEqual(result.returncode,0,result.stderr);self.assertEqual(result.stdout.strip(),'UPDATED')
 
     def test_startup_failure_restores_base_and_marks_failed_version(self):
