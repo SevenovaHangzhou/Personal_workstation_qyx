@@ -1,25 +1,23 @@
-# 星序 ORBIT · 知序 LUMA
+# 星序 / ORBIT
 
-两个独立的原生桌面应用，共用维护代码，分别保存数据。
+原生桌面工作助手：管理工作、Demo 和日常任务，关联 Codex 与 Linear，记录日报、周报和 Git 留存。
 
-- **星序 / ORBIT**：工作、Demo、日常任务，Codex 聊天、Linear、Git 留存和日报。
-- **知序 / LUMA**：学习任务、专注计时、课程生成与阅读、核心知识和随课答疑。
-
-支持 Linux x86_64、Windows 10/11 x64。窗口和字体可在偏好设置中调整。
+支持 Linux x86_64、Windows 10/11 x64，可调整窗口与字体。
 
 ## 启动
 
-源码需 Python 3.11+，安装 `requirements.txt` 后：
+源码需要 Python 3.11+，先安装 `requirements.txt` 中的依赖。
 
-| | Linux | Windows |
-|---|---|---|
-| 星序 | `./run.sh` | `./run.ps1` |
-| 知序 | `./run-luma.sh` | `./run-luma.ps1` |
+- Linux：`./run.sh`
+- Windows：`./run.ps1`
 
-[下载正式版本](https://github.com/SevenovaHangzhou/Personal_workstation_qyx/releases/latest)。0.10.0 起分别提供两款应用安装包；较早版本是合并版。
+[下载应用](https://github.com/SevenovaHangzhou/Personal_workstation_qyx/releases/latest)。关闭窗口会驻留托盘，完整退出请使用托盘菜单。
 
-首次启动前请从旧版托盘退出。应用会备份原数据，再迁移到 `Sevenova/OrbitWork` 和 `Sevenova/Luma`；原空间及完整备份保留。重复启动不会重复迁移。星序的新日报只收集明确绑定其任务的聊天。
+## 维护
 
-关闭窗口会驻留托盘，完整退出请使用托盘菜单。两款应用分别检查、校验更新，退出后切换，下次启动生效。
+- `main`：星序 / ORBIT，工作相关功能。
+- [luma 分支](https://github.com/SevenovaHangzhou/Personal_workstation_qyx/tree/luma)：知序 / LUMA，学习与专注。
 
-[拆分与数据恢复说明](docs/APP_SPLIT.md)
+两条分支均支持 Linux 和 Windows。运行 `python scripts/build_product.py` 构建当前分支的产品。
+
+[分支约定](docs/BRANCHES.md) · [数据迁移与恢复](docs/APP_SPLIT.md)

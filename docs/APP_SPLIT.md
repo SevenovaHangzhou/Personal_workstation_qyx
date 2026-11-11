@@ -12,7 +12,7 @@
 | 数据目录 | Sevenova/OrbitWork | Sevenova/Luma |
 | 桌面 ID | com.sevenova.Orbit | com.sevenova.Luma |
 
-两者是独立进程、托盘、窗口激活地址、偏好设置和数据锁，可同时运行。共用源码，避免 Linux/Windows 版本分叉。`main.py` 兼容工作版启动，正式入口是 `orbit.py`、`luma.py`。旧 combined 配置仅供导入式回归工具使用，不作为交付应用。
+两者是独立进程、托盘、窗口激活地址、偏好设置和数据锁，可同时运行。源码在 `main`（星序）与 `luma`（知序）分支独立维护，保留共同历史；每条产品分支都支持 Linux 和 Windows。详见 [分支约定](BRANCHES.md)。`main.py` 兼容工作版启动，正式入口是 `orbit.py`、`luma.py`。旧 combined 配置仅供导入式回归工具使用，不作为交付应用。
 
 ## 迁移与恢复
 
@@ -30,4 +30,4 @@
 
 ## 打包与 OTA
 
-`ORBIT_APP_PROFILE=work` 或 `study` 选择 `scripts/build_release.py` / `scripts/build_windows.py` 的产品。发布清单含 app_id、平台、版本与摘要；客户端拒绝另一产品的清单。Linux 分别生成 deb / tar.gz，Windows 分别生成 setup.exe / zip。CI 对两个产品构建及离线探测，上传的验证材料仅截图，不上传运行日志或用户数据。
+`python scripts/build_product.py` 构建当前分支维护的产品；底层也可通过 `ORBIT_APP_PROFILE=work` 或 `study` 选择 `scripts/build_release.py` / `scripts/build_windows.py` 的产品。发布清单含 app_id、平台、版本与摘要；客户端拒绝另一产品的清单。Linux 分别生成 deb / tar.gz，Windows 分别生成 setup.exe / zip。CI 对两个产品构建及离线探测，上传的验证材料仅截图，不上传运行日志或用户数据。
