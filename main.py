@@ -52,26 +52,72 @@ from task_outline_ui import add_relations, add_step_toggle, add_outline_card, bu
 
 
 class TitleBar(QFrame):
+    """Use the compositor's move operation (required on Wayland)."""
     def __init__(self, window):
-        super().__init__(); self.window=window; self.drag=None; self.setObjectName("titlebar"); self.setFixedHeight(44)
-        row=box(self,True,(18,0,10,0),9)
-        badge=QLabel(); badge.setPixmap(icon("orbit","#426c83",18).pixmap(18,18)); row.addWidget(badge)
-        row.addWidget(label(APP_DISPLAY_NAME, "muted")); row.addStretch()
-        row.addWidget(label(TAGLINE, "eyebrow")); row.addStretch()
+        super().__init__(); self.window=window; self.drag=None
+        self.setObjectName("titlebar"); self.setFixedHeight(40)
+        self.setToolTip("拖动标题栏移动窗口 · 双击最大化或还原")
+        row=box(self,True,(16,0,10,0),8)
+        badge=QLabel(); badge.setPixmap(icon("orbit",PALETTE["primary"],18).pixmap(18,18)); row.addWidget(badge)
+        name=label(APP_DISPLAY_NAME,"muted"); row.addWidget(name); row.addStretch()
+        for child in (badge,name): child.setAttribute(Qt.WA_TransparentForMouseEvents)
         for glyph,tip,fn in [("minimize","最小化",window.showMinimized),("maximize","最大化 / 还原",self.maximize),("close","收起到托盘",window.close)]:
-            b=button(name="iconButton",glyph=glyph,callback=fn); b.setFixedSize(30,28); b.setToolTip(tip); b.setAccessibleName(tip); row.addWidget(b)
+            control=button(name="iconButton",glyph=glyph,callback=fn)
+            control.setFixedSize(30,28); control.setToolTip(tip); control.setAccessibleName(tip); row.addWidget(control)
 
     def maximize(self):
         self.window.showNormal() if self.window.isMaximized() else self.window.showMaximized()
 
+    def start_system_move(self):
+        handle=self.window.windowHandle()
+        try: return bool(handle and handle.startSystemMove())
+        except (AttributeError,RuntimeError): return False
+
     def mousePressEvent(self,event):
-        if event.button()==Qt.LeftButton: self.drag=event.globalPos()-self.window.frameGeometry().topLeft()
+        if event.button()!=Qt.LeftButton: return super().mousePressEvent(event)
+        self.drag=None
+        if not self.start_system_move():
+            if self.window.isMaximized():
+                ratio=event.pos().x()/max(self.width(),1)
+                self.window.showNormal()
+                self.window.move(event.globalPos().x()-round(self.window.width()*ratio),event.globalPos().y()-event.pos().y())
+            self.drag=event.globalPos()-self.window.frameGeometry().topLeft()
+        event.accept()
 
     def mouseMoveEvent(self,event):
-        if self.drag is not None and event.buttons() & Qt.LeftButton and not self.window.isMaximized(): self.window.move(event.globalPos()-self.drag)
+        if self.drag is not None and event.buttons() & Qt.LeftButton:
+            self.window.move(event.globalPos()-self.drag); event.accept()
+        else: super().mouseMoveEvent(event)
 
-    def mouseReleaseEvent(self,event): self.drag=None
-    def mouseDoubleClickEvent(self,event): self.maximize()
+    def mouseReleaseEvent(self,event):
+        self.drag=None; super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self,event):
+        if event.button()==Qt.LeftButton:
+            self.drag=None; self.maximize(); event.accept()
+        else: super().mouseDoubleClickEvent(event)
+
+
+class DetailSection(QFrame):
+    """Keep optional tools available without filling the task reading area."""
+    def __init__(self,owner,key,title,content):
+        super().__init__(); self.setObjectName('detailSection')
+        self.owner=owner; self.key=key; self.title=title
+        layout=box(self,spacing=8)
+        self.toggle=button(name='sectionToggle',callback=self.flip)
+        self.toggle.setCheckable(True); self.toggle.setAccessibleName(title)
+        self.content=content; layout.addWidget(self.toggle); layout.addWidget(content)
+        self.apply_state(key in owner.open_sections)
+
+    def apply_state(self,expanded):
+        self.toggle.setChecked(expanded); self.toggle.setText(('▾  ' if expanded else '▸  ')+self.title)
+        self.content.setVisible(expanded)
+
+    def flip(self):
+        expanded=self.toggle.isChecked()
+        if expanded: self.owner.open_sections.add(self.key)
+        else: self.owner.open_sections.discard(self.key)
+        self.apply_state(expanded)
 
 
 class TaskRow(DraggableTaskCard):
@@ -219,6 +265,7 @@ class Momo(QMainWindow):
         self.view="today"; self.status_filter="all"; self.list_mode="list"
         self.expanded_tasks=set(); self.collapsed_tasks=set(); self.outline_filter=None
         self.task_drag_active=False; self.task_order_saved=False
+        self.open_sections=set(); self.worklog_dialog=None
         self.mini=None; self.linear_dialog=None; self.binding_dialog=None; self.nav_buttons={}; self.note_task_id=None
         self.station_dialog=None; self.learning_dialogs={}; self.exiting=False
         self.seen_completion=self.focus.snapshot()["completion_serial"] if self.focus else 0; self.shown_focus_error=""
@@ -266,8 +313,8 @@ class Momo(QMainWindow):
         side=QWidget(); self.sidebar=side
         navigation=QScrollArea(); navigation.setWidgetResizable(True); navigation.setWidget(side); navigation.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff); side_layout.addWidget(navigation,1)
         col=box(side,margins=(17,23,17,18),spacing=7)
-        brand=box(horizontal=True,spacing=8); brand.addWidget(OrbitMark(compact=True)); names=box(spacing=1); names.addWidget(label(APP_NAME,"brand")); names.addWidget(label(APP_WORDMARK,"eyebrow")); brand.addLayout(names); brand.addStretch(); col.addLayout(brand); col.addSpacing(20)
-        self.add_nav(col,"today","今天","sun"); self.add_nav(col,"all","全部任务","tasks"); self.add_nav(col,"linked","关联空间","link") if self.runtime.profile.work else None
+        brand=box(horizontal=True,spacing=8); brand.addWidget(OrbitMark(compact=True)); names=box(spacing=1); names.addWidget(label(APP_NAME,"brand")); names.addWidget(label(APP_WORDMARK,"eyebrow")); brand.addLayout(names); brand.addStretch(); col.addLayout(brand); col.addSpacing(12)
+        self.add_nav(col,"today","今天","sun"); self.add_nav(col,"all","全部任务","tasks"); self.add_nav(col,"linked","关联空间","link") if self.runtime.profile.key=="combined" else None
         col.addSpacing(17); col.addWidget(label("任务方向","section")); col.addSpacing(3)
         for key,title in CATEGORIES.items(): self.add_nav(col,key,title,ICONS[key])
         col.addSpacing(14); self.add_nav(col,"done","已完成","check")
@@ -275,15 +322,31 @@ class Momo(QMainWindow):
             col.addSpacing(14); col.addWidget(label("进展与记录","section"))
             col.addWidget(button("需要我处理","nav",callback=self.open_attention))
             col.addWidget(button("日报与同步","nav",glyph="book",callback=self.open_daily))
+            self.end_day_button=button('下班','nav',callback=lambda:self.open_worklog('today'))
+            self.end_day_button.setAccessibleName('下班')
+            self.end_day_button.setToolTip('后台总结今天 00:00 至当前的工作记录；仅本地保存，应用继续运行')
+            col.addWidget(self.end_day_button)
+            self.weeklog_button=button('总结周报','nav',callback=lambda:self.open_worklog('week'))
+            self.weeklog_button.setToolTip('统计本周一 00:00 至当前；仅本地保存')
+            col.addWidget(self.weeklog_button)
         col.addStretch()
         quiet=QFrame(); quiet.setObjectName("quiet"); quiet.setMinimumHeight(54); q=box(quiet,margins=(13,12,13,12),spacing=8)
         self.sidebar_done=label("","muted",True); q.addWidget(self.sidebar_done)
-        self.day_progress=QProgressBar(); self.day_progress.setTextVisible(False); q.addWidget(self.day_progress); col.addWidget(quiet)
+        self.day_progress=QProgressBar(); self.day_progress.setTextVisible(False); q.addWidget(self.day_progress); col.addWidget(quiet); quiet.setVisible(self.runtime.profile.key!="work")
         footer_widget=QWidget(); side_layout.addWidget(footer_widget)
         col=box(footer_widget,margins=(17,8,17,12),spacing=7)
         col.addWidget(button("偏好设置","nav",glyph="settings",callback=self.settings))
-        col.addWidget(button("停止执行并退出","linkButton",callback=self.exit_application))
+        if self.runtime.profile.key=="work":
+            more=button("更多","nav"); more.setAccessibleName("更多应用操作"); menu=QMenu(more)
+            menu.addAction("已关联的任务",lambda:self.navigate('linked'))
+            menu.addAction("应用更新 · v"+APP_VERSION,self.open_updates)
+            menu.addSeparator(); menu.addAction("退出星序",self.exit_application)
+            more.setMenu(menu); col.addWidget(more)
+        else: col.addWidget(button("停止执行并退出","linkButton",callback=self.exit_application))
         foot=box(horizontal=True); foot.addWidget(label("●  本地保存","eyebrow")); foot.addStretch(); foot.addWidget(button('v'+APP_VERSION,'linkButton',callback=self.open_updates)); col.addLayout(foot)
+        if self.runtime.profile.key=="work":
+            for i in range(foot.count()):
+                if foot.itemAt(i).widget(): foot.itemAt(i).widget().hide()
 
     def add_nav(self,layout,key,text,glyph):
         b=button(text,"nav",glyph=glyph,callback=lambda checked=False,k=key:self.navigate(k)); b.setCheckable(True); layout.addWidget(b); self.nav_buttons[key]=b
@@ -292,11 +355,29 @@ class Momo(QMainWindow):
         main=QWidget(); self.main_panel=main; body.addWidget(main,1); col=box(main,margins=(29,23,29,18),spacing=17); self.main_layout=col
         crumb=box(horizontal=True); self.breadcrumb=label("我的空间  /  今天","muted"); crumb.addWidget(self.breadcrumb)
         self.details_toggle=button("任务详情","outline",callback=self.open_details); self.details_toggle.setToolTip("在独立面板查看和编辑当前任务"); crumb.addWidget(self.details_toggle)
-        self.sample_badge=button("示例空间","soft",callback=self.sample_info); self.sample_badge.setStyleSheet("padding:3px 7px;"); crumb.addWidget(self.sample_badge); crumb.addStretch()
-        self.search=QLineEdit(); self.search.setObjectName("search"); self.search.setPlaceholderText("搜索任务    Ctrl K"); self.search.setFixedWidth(174); self.search.addAction(icon("search","#5f7488",16),QLineEdit.LeadingPosition); self.search.textChanged.connect(self.refresh_list); crumb.addWidget(self.search); col.addLayout(crumb)
-        heading=box(horizontal=True); words=box(spacing=6); self.heading=label("把今天，连成方向。","h1",True); words.addWidget(self.heading)
+        crumb.addStretch()
+        self.search=QLineEdit(); self.search.setObjectName("search"); self.search.setPlaceholderText("搜索任务    Ctrl K"); self.search.setFixedWidth(174); self.search.addAction(icon("search","#5f7488",16),QLineEdit.LeadingPosition); self.search.textChanged.connect(self.refresh_list); crumb.addWidget(self.search); col.addLayout(crumb); self.crumb_layout=crumb
+        heading=box(horizontal=True); self.heading_layout=heading; words=box(spacing=6); self.heading=label("把今天，连成方向。","h1",True); words.addWidget(self.heading)
         self.subtitle=label("聚焦眼前一步，让想法沿着清晰的路径前进。","muted",True); words.addWidget(self.subtitle); heading.addLayout(words); heading.addStretch()
-        heading.addWidget(button("新建任务","coral","plus",color="#514738",callback=self.new_task)); col.addLayout(heading)
+        self.task_actions=QWidget(); actions=box(self.task_actions,horizontal=True,spacing=8)
+        self.my_issues_button=None
+        if self.runtime.profile.work:
+            self.my_issues_button=button('拉取 My Issues','outline',glyph='linear',callback=self.pull_my_issues)
+            self.my_issues_button.setToolTip('从 Linear 拉取指派给我、且本地尚未创建任务的 issue；已有任务自动跳过')
+            actions.addWidget(self.my_issues_button)
+        self.new_task_button=button('新建任务','coral','plus',color='#514738',callback=self.new_task)
+        actions.addWidget(self.new_task_button); heading.addWidget(self.task_actions); col.addLayout(heading)
+        self.task_actions_bar=QWidget(); self.task_actions_layout=box(self.task_actions_bar,horizontal=True)
+        self.task_actions_layout.addStretch(); col.addWidget(self.task_actions_bar); self.task_actions_bar.hide()
+        if self.runtime.profile.key=="work":
+            crumb.removeWidget(self.search); heading.insertWidget(2,self.search)
+            self.search.setMinimumWidth(100); self.search.setMaximumWidth(220)
+            self.search.setSizePolicy(self.search.sizePolicy().Expanding,self.search.sizePolicy().Fixed)
+            for widget in (self.breadcrumb,self.subtitle): widget.hide()
+            # Compact mode keeps this button available next to the search field.
+            crumb.removeWidget(self.details_toggle); heading.insertWidget(3,self.details_toggle)
+            crumb.setContentsMargins(0,0,0,0)
+
         self.focus_card=QFrame(); self.focus_card.setObjectName("focus"); focus=box(self.focus_card,True,(19,14,19,14),17)
         text=box(spacing=9); self.focus_status=label("●  留一段专注时间","eyebrow"); text.addWidget(self.focus_status)
         self.focus_title=label("","h2",True); text.addWidget(self.focus_title)
@@ -311,17 +392,42 @@ class Momo(QMainWindow):
         self.focus_card.setVisible(bool(self.focus))
         listhead=box(horizontal=True,spacing=7); self.list_title=label("我的任务","h2"); listhead.addWidget(self.list_title); self.list_count=label("5","badge"); listhead.addWidget(self.list_count); listhead.addStretch()
         self.undo_structure_button=button('撤销结构调整','linkButton',callback=self.undo_task_structure); listhead.addWidget(self.undo_structure_button)
-        self.my_issues_button=button("拉取 My Issues","soft","linear",callback=self.pull_my_issues); listhead.addWidget(self.my_issues_button)
         self.list_btn=button(name="iconButton",glyph="list",callback=lambda:self.change_mode("list")); self.list_btn.setToolTip("列表视图"); self.list_btn.setAccessibleName("列表视图")
         self.board_btn=button(name="iconButton",glyph="grid",callback=lambda:self.change_mode("board")); self.board_btn.setToolTip("看板视图"); self.board_btn.setAccessibleName("看板视图"); listhead.addWidget(self.list_btn); listhead.addWidget(self.board_btn); col.addLayout(listhead)
         filters=box(horizontal=True,spacing=3); self.filter_buttons={}
         for key,title in [("all","全部"),("todo","待开始"),("doing","进行中"),("waiting","等我处理")]:
             b=button(title,"filter",callback=lambda checked=False,k=key:self.set_filter(k)); b.setCheckable(True); filters.addWidget(b); self.filter_buttons[key]=b
         filters.addStretch(); self.date_label=label("","eyebrow"); filters.addWidget(self.date_label); col.addLayout(filters)
+        if self.runtime.profile.key=="work":
+            self.list_title.hide(); self.date_label.hide()
+            for index,control in enumerate(self.filter_buttons.values()):
+                filters.removeWidget(control); listhead.insertWidget(index,control)
+            self.list_count.hide()
+            self.list_btn.hide(); self.board_btn.hide(); self.undo_structure_button.hide()
+            menu_button=button("视图与操作","soft"); menu_button.setAccessibleName("任务视图与操作")
+            menu=QMenu(menu_button); menu.aboutToShow.connect(self.sync_task_menu)
+            self.view_actions={}
+            for mode,title in [('list','列表视图'),('board','看板视图')]:
+                action=menu.addAction(title,lambda checked=False,m=mode:self.change_mode(m)); action.setCheckable(True); self.view_actions[mode]=action
+            menu.addSeparator(); self.undo_action=menu.addAction('撤销结构调整',self.undo_task_structure)
+            menu_button.setMenu(menu); listhead.addWidget(menu_button)
+
         self.outline_hint=label('', 'muted', True); col.addWidget(self.outline_hint)
         self.independent_drop=IndependentTaskDropArea(self); col.addWidget(self.independent_drop)
         self.scroll=QScrollArea(); self.scroll.setWidgetResizable(True); self.list_host=TaskDropArea(self); self.task_list=box(self.list_host,spacing=9); self.task_list.setAlignment(Qt.AlignTop); self.scroll.setWidget(self.list_host); col.addWidget(self.scroll,1)
         footer=box(horizontal=True); self.complete_summary=label("","muted"); footer.addWidget(self.complete_summary); footer.addStretch(); self.footer_shortcuts=label("Ctrl N  新建  ·  Ctrl Shift F  专注" if self.focus else "Ctrl N  新建  ·  Ctrl K  搜索","eyebrow"); footer.addWidget(self.footer_shortcuts); col.addLayout(footer)
+        if self.runtime.profile.key=="work":
+            self.complete_summary.hide(); self.footer_shortcuts.hide()
+
+    def sync_task_menu(self):
+        for mode,action in self.view_actions.items(): action.setChecked(mode==self.list_mode)
+        undo=self.tasks.undo_state(); self.undo_action.setEnabled(undo['available'])
+        self.undo_action.setText('撤销：'+undo['label'] if undo['available'] else '撤销结构调整')
+
+    def add_detail_section(self,title,content,key):
+        if self.runtime.profile.key=="work":
+            self.detail_content.addWidget(DetailSection(self,(self.selected,key),title,content))
+        else: self.detail_content.addWidget(content)
 
     def build_details(self,body):
         self.details=QFrame(); self.details.setObjectName("details"); self.details.setFixedWidth(334); body.addWidget(self.details)
@@ -353,15 +459,15 @@ class Momo(QMainWindow):
         self.seen_revision=self.tasks.revision()["revision"]
         self.learning_state=self.runtime.learning.snapshot() if self.runtime.learning else {"revision":0,"bindings":{},"jobs":[]}
         self.seen_learning_revision=self.learning_state["revision"]
-        self.my_issues_button.setVisible(self.view == "work")
+        if self.my_issues_button:
+            self.my_issues_button.setVisible(self.runtime.profile.key=='work' or self.view=='work')
         undo=self.tasks.undo_state(); self.undo_structure_button.setEnabled(undo['available'])
         self.undo_structure_button.setToolTip(('撤销：'+undo['label']) if undo['available'] else undo['reason'])
         today=[t for t in self.tasks.tasks if t["day"]==date.today().isoformat()]; done=sum(t["status"]=="done" for t in today)
-        self.space_sample=self.tasks.sample; self.sample_badge.setVisible(self.space_sample and not self.compact_layout)
         self.sidebar_done.setText(f"今天完成 {done} 项任务"); self.day_progress.setValue(round(done/len(today)*100) if today else 0)
         self.complete_summary.setText(f"已完成 {done} 项，留下今天的进展。" if done else "从眼前的一步开始。")
         titles={"today":"把今天，连成方向。","all":"让每件事，各就其位。","linked":"把上下文，接起来。","done":"每一步，都有回响。",**{k:v for k,v in CATEGORIES.items()}}
-        self.heading.setText(titles[self.view]); self.breadcrumb.setText("我的空间  /  "+({"today":"今天","all":"全部任务","linked":"关联空间","done":"已完成",**CATEGORIES}[self.view]))
+        self.heading.setText(({"today":"今天","all":"全部任务","linked":"已关联","done":"已完成",**CATEGORIES}[self.view]) if self.runtime.profile.key=="work" else titles[self.view]); self.breadcrumb.setText("我的空间  /  "+({"today":"今天","all":"全部任务","linked":"关联空间","done":"已完成",**CATEGORIES}[self.view]))
         for key,b in self.nav_buttons.items():
             b.setChecked(key==self.view)
             if key in CATEGORIES: count=sum(t["category"]==key and t["status"]!="done" for t in self.tasks.tasks)
@@ -380,7 +486,7 @@ class Momo(QMainWindow):
         clear(self.task_list)
         for key,b in self.filter_buttons.items(): b.setChecked(key==self.status_filter)
         tasks=self.visible_tasks()
-        self.independent_drop.setVisible(any(task.get('parent_id') for task in tasks))
+        self.independent_drop.setVisible(self.runtime.profile.key!="work" and any(task.get('parent_id') for task in tasks))
         self.task_outline=TaskOutline(self.tasks.tasks)
         filter_key=(self.view,self.status_filter,self.search.text().strip().lower())
         if filter_key!=self.outline_filter:
@@ -397,6 +503,7 @@ class Momo(QMainWindow):
         selected_index=next((i for i,entry in enumerate(entries) if entry.task['id']==self.selected),-1)
         self.task_page_limit=max(getattr(self,'task_page_limit',80),((selected_index//80)+1)*80)
         remaining=max(0,len(entries)-self.task_page_limit); entries=entries[:self.task_page_limit]
+        self.outline_hint.setVisible(self.runtime.profile.key!="work" or bool(remaining))
         if remaining:self.outline_hint.setText(self.outline_hint.text()+f' · 另有 {remaining} 项，可继续显示或搜索定位。')
         self.list_btn.setStyleSheet("background:#e7eff5;" if self.list_mode=="list" else ""); self.board_btn.setStyleSheet("background:#e7eff5;" if self.list_mode=="board" else "")
         if not tasks:
@@ -666,7 +773,9 @@ class Momo(QMainWindow):
         location_box.addWidget(button('移动到其他任务','outline',callback=lambda checked=False:self.move_task(task['id'])))
         if ancestors:
             location_box.addWidget(button('移为独立任务','linkButton',callback=lambda checked=False:self.detach_task(task['id'])))
-        self.detail_content.addWidget(location)
+        advanced=QFrame(); advanced_layout=box(advanced,spacing=12)
+        settings_layout=advanced_layout if self.runtime.profile.key=="work" else self.detail_content
+        settings_layout.addWidget(location)
         if task["description"]: self.detail_content.addWidget(label(task["description"],"muted",True))
         if task['category']=='learn':
             course=QFrame(); course.setObjectName('binding'); content=box(course,margins=(12,12,12,12),spacing=10)
@@ -677,33 +786,51 @@ class Momo(QMainWindow):
             self.detail_content.addWidget(course)
         self.detail_content.addWidget(line())
         props=box(horizontal=True); props.addWidget(label("计划日期","muted")); props.addStretch(); props.addWidget(label("今天" if task["day"]==date.today().isoformat() else task["day"],"muted")); self.detail_content.addLayout(props)
+        if self.runtime.profile.key=="work": self.build_task_links(task)
         from progress_evidence_ui import ProgressPanel
-        self.detail_content.addWidget(ProgressPanel(self, task))
+        settings_layout.addWidget(ProgressPanel(self, task))
         from task_dependencies_ui import DependencyPanel
-        self.detail_content.addWidget(DependencyPanel(self,task,self.tasks.tasks))
+        settings_layout.addWidget(DependencyPanel(self,task,self.tasks.tasks))
         if not task.get('parent_id'):
             route=self.task_route(task)
             if route:
-                self.detail_content.addWidget(label('所在路线 · 串行与并行','section'))
+                settings_layout.addWidget(label('所在路线 · 串行与并行','section'))
                 graph=TaskDag(compact=True); graph.setObjectName('rootRouteDag'); graph.setFixedHeight(220); graph.set_tasks(route)
-                graph.selected.connect(graph.choose); graph.activated.connect(self.select_task); self.detail_content.addWidget(graph)
-                self.detail_content.addWidget(button('放大任务路线','linkButton',callback=lambda:self.show_task_route(task['id'])))
-        stephead=box(horizontal=True); stephead.addWidget(label("方向与小步","section")); stephead.addStretch(); stephead.addWidget(label(f"{sum(s['done'] for s in task['steps'])} / {len(task['steps'])}","muted")); self.detail_content.addLayout(stephead)
+                graph.selected.connect(graph.choose); graph.activated.connect(self.select_task); settings_layout.addWidget(graph)
+                settings_layout.addWidget(button('放大任务路线','linkButton',callback=lambda:self.show_task_route(task['id'])))
+        stephead_widget=QWidget(); stephead=box(stephead_widget,horizontal=True); stephead.addWidget(label("方向与小步","section")); stephead.addStretch(); stephead.addWidget(label(f"{sum(s['done'] for s in task['steps'])} / {len(task['steps'])}","muted")); self.detail_content.addWidget(stephead_widget); stephead_widget.setVisible(self.runtime.profile.key!="work" or bool(task["steps"]))
         children=[t for t in self.tasks.tasks if t.get('parent_id')==task['id']]
         if children:
             dag=TaskDag(compact=True); dag.setObjectName('detailDag'); dag.setFixedHeight(220); dag.set_tasks(children)
             dag.selected.connect(dag.choose); dag.activated.connect(self.select_task)
-            self.detail_content.addWidget(dag)
-            self.detail_content.addWidget(button("放大步骤图与调整路线","linkButton",callback=lambda:self.create_children(task['id'])))
+            self.add_detail_section('步骤图',dag,'dag')
+            if self.runtime.profile.key!="work": self.detail_content.addWidget(button("放大步骤图与调整路线","linkButton",callback=lambda:self.create_children(task['id'])))
         for index,step in enumerate(task["steps"]):
             row=box(horizontal=True)
             cb=QCheckBox(); cb.setAccessibleName(step["title"]); cb.setChecked(step["done"]); cb.setToolTip(step["title"]); cb.stateChanged.connect(lambda state,i=index:self.check_step(task["id"],i,state==Qt.Checked)); row.addWidget(cb)
             row.addWidget(label(step["title"],"muted" if step["done"] else None,True),1)
             row.addWidget(button("打开","linkButton",callback=lambda checked=False,cid=step["id"]:self.select_task(cid))); self.detail_content.addLayout(row)
         self.detail_content.addWidget(button("＋ 规划下一步","outline",callback=lambda:self.create_children(task["id"])))
-        p=QProgressBar(); p.setTextVisible(False); p.setValue(progress(task)); self.detail_content.addWidget(p)
+        p=QProgressBar(); p.setTextVisible(False); p.setValue(progress(task)); p.setVisible(bool(task["steps"])); self.detail_content.addWidget(p)
         self.detail_content.addSpacing(2); self.detail_content.addWidget(line())
-        if self.runtime.profile.work:
+        if self.runtime.profile.key!="work": self.build_task_links(task)
+        if task["category"]=="work" and not task.get("parent_id"):
+            settings_layout.addWidget(button("选择本任务 Linear 归属","linkButton",callback=self.select_task_target))
+        if task["category"]=="work":
+            repohead=box(horizontal=True); repohead.addWidget(label("Git 仓库","section")); repohead.addStretch(); repohead.addWidget(button("关联仓库","linkButton",callback=self.manage_repositories)); settings_layout.addLayout(repohead)
+            repos=task.get("repositories",[])
+            if not repos and self.runtime.profile.key!="work": settings_layout.addWidget(label("给这件工作，连上它的代码。","muted",True))
+            for index,repo in enumerate(repos):
+                row=box(horizontal=True,spacing=7)
+                name=label(("本地 · " if repo["kind"]=="local" else "远程 · ")+repo["name"],"muted",True); name.setToolTip(repo["location"]); row.addWidget(name,1)
+                row.addWidget(button("打开 ↗","linkButton",callback=lambda checked=False,i=index:self.open_repository(i))); settings_layout.addLayout(row)
+        if self.runtime.profile.key=="work": self.add_detail_section('更多任务设置',advanced,'settings')
+        else: advanced.deleteLater()
+        self.detail_content.addWidget(label("笔记" if self.runtime.profile.key=="work" else "留一句给下次的自己","section"))
+        self.note=QTextEdit(); self.note.setObjectName("note"); self.note.setPlaceholderText("下次打开时，从这里继续…"); self.note.setFixedHeight(70); self.note.setPlainText(task["note"]); self.note_task_id=task["id"]; self.note.textChanged.connect(self.note_debounce.start); self.detail_content.addWidget(self.note)
+
+    def build_task_links(self,task):
+        if self.runtime.profile.key=="combined":
             linkshead=box(horizontal=True); linkshead.addWidget(label("关联空间","section")); linkshead.addStretch(); linkshead.addWidget(button("管理关联","linkButton",callback=lambda checked=False:self.bind_task("codex"))); self.detail_content.addLayout(linkshead)
         for kind,name in [("codex","Codex 聊天"),("linear","Linear issue")]:
             if not self.runtime.profile.work or kind=="linear" and task["category"]!="work": continue
@@ -722,8 +849,13 @@ class Momo(QMainWindow):
             elif kind=="linear": layout.addWidget(button("＋  关联一个 issue","linkButton",callback=lambda checked=False:self.bind_task("linear")))
             if kind=="codex":
                 actions=box(horizontal=True,spacing=8)
-                actions.addWidget(button("新建聊天","outline",callback=self.new_chat),1)
-                actions.addWidget(button("绑定已有聊天","outline",callback=lambda checked=False:self.bind_task("codex")),1)
+                if task_chat and self.runtime.profile.key=="work":
+                    more=button('聊天设置','linkButton'); menu=QMenu(more)
+                    menu.addAction('新建聊天',self.new_chat); menu.addAction('绑定已有聊天',lambda:self.bind_task('codex'))
+                    more.setMenu(menu); actions.addWidget(more); actions.addStretch()
+                else:
+                    actions.addWidget(button("新建聊天","outline",callback=self.new_chat),1)
+                    actions.addWidget(button("绑定已有聊天","outline",callback=lambda checked=False:self.bind_task("codex")),1)
                 layout.addLayout(actions)
             self.detail_content.addWidget(card)
         if task["category"]=="work" and task.get("linear_issue"):
@@ -733,18 +865,6 @@ class Momo(QMainWindow):
             self.detail_content.addWidget(label("步骤层级已调整 · Linear 父级待 22:00 同步","muted",True))
         if task["category"]=="work" and not has_work_issue(task):
             self.detail_content.addWidget(label("待同步：22:00 自动为此工作任务创建 issue；也可手动绑定。","muted",True))
-        if task["category"]=="work" and not task.get("parent_id"):
-            self.detail_content.addWidget(button("选择本任务 Linear 归属","linkButton",callback=self.select_task_target))
-        if task["category"]=="work":
-            repohead=box(horizontal=True); repohead.addWidget(label("Git 仓库","section")); repohead.addStretch(); repohead.addWidget(button("关联仓库","linkButton",callback=self.manage_repositories)); self.detail_content.addLayout(repohead)
-            repos=task.get("repositories",[])
-            if not repos: self.detail_content.addWidget(label("给这件工作，连上它的代码。","muted",True))
-            for index,repo in enumerate(repos):
-                row=box(horizontal=True,spacing=7)
-                name=label(("本地 · " if repo["kind"]=="local" else "远程 · ")+repo["name"],"muted",True); name.setToolTip(repo["location"]); row.addWidget(name,1)
-                row.addWidget(button("打开 ↗","linkButton",callback=lambda checked=False,i=index:self.open_repository(i))); self.detail_content.addLayout(row)
-        self.detail_content.addWidget(label("留一句给下次的自己","section"))
-        self.note=QTextEdit(); self.note.setObjectName("note"); self.note.setPlaceholderText("下次打开时，从这里继续…"); self.note.setFixedHeight(70); self.note.setPlainText(task["note"]); self.note_task_id=task["id"]; self.note.textChanged.connect(self.note_debounce.start); self.detail_content.addWidget(self.note)
 
     def flush_editors(self):
         self.note_debounce.stop()
@@ -836,6 +956,8 @@ class Momo(QMainWindow):
     def pull_my_issues(self):
         if not self.flush_editors(): return
         self.linear_dialog=LinearDialog(self)
+        if self.runtime.linear.connection()['configured']:
+            QTimer.singleShot(0,self.linear_dialog.pull)
         self.linear_dialog.exec_()
         self.linear_dialog.deleteLater(); self.linear_dialog=None
 
@@ -961,25 +1083,30 @@ class Momo(QMainWindow):
         compact=self.width()<side_width+detail_width+round(640*max(1,ratio*.85))
         changed=compact!=self.compact_layout; self.compact_layout=compact
         self.sidebar_scroll.setFixedWidth(side_width)
-        self.details_toggle.setVisible(compact); self.breadcrumb.setVisible(not compact); self.sample_badge.setVisible(not compact and getattr(self,"space_sample",False))
+        self.details_toggle.setVisible(compact); self.breadcrumb.setVisible(not compact and self.runtime.profile.key!="work")
+        separate_actions=compact and self.runtime.profile.key=='work'
+        target=self.task_actions_layout if separate_actions else self.heading_layout
+        if target.indexOf(self.task_actions)<0:
+            self.heading_layout.removeWidget(self.task_actions); self.task_actions_layout.removeWidget(self.task_actions)
+            target.addWidget(self.task_actions); self.task_actions.show()
+        self.task_actions_bar.setVisible(separate_actions)
         self.mascot.setVisible(not compact)
-        self.subtitle.setVisible(not compact)
+        self.subtitle.setVisible(not compact and self.runtime.profile.key!="work")
         self.focus_title.setVisible(not compact or self.width()-side_width>=650)
         self.focus_status.setVisible(not compact); self.focus_step.setVisible(not compact)
         self.focus_caption.setVisible(not compact); self.focus_divider.setVisible(not compact)
         self.focus_timer_layout.setDirection(0 if compact else 2)
         self.focus_card.setMinimumHeight(80 if compact else 190)
         self.focus_title.setMaximumHeight(round(52*ratio) if compact else 16777215)
-        self.footer_shortcuts.setVisible(not compact)
+        self.footer_shortcuts.setVisible(not compact and self.runtime.profile.key!="work")
         self.main_layout.setSpacing(10 if compact else 17)
-        self.outline_hint.setVisible(not compact or self.height()>=760)
+        self.outline_hint.setVisible(self.runtime.profile.key!="work" and (not compact or self.height()>=760))
         if changed:
             for widget in (self.timer_label,self.heading):
                 widget.setProperty('compact',compact); widget.style().unpolish(widget); widget.style().polish(widget)
         self.main_layout.setContentsMargins(18 if compact else 29,16,18 if compact else 29,14)
-        self.my_issues_button.setText('My Issues' if compact else '拉取 My Issues')
         self.undo_structure_button.setText('撤销' if compact else '撤销结构调整')
-        self.date_label.setVisible(not compact)
+        self.date_label.setVisible(not compact and self.runtime.profile.key!="work")
         if compact:
             if self.details.parentWidget()!=self.details_dialog:
                 self.details.setParent(self.details_dialog); self.details_dialog.layout().addWidget(self.details)
@@ -995,24 +1122,21 @@ class Momo(QMainWindow):
         from update_ui import UpdateDialog
         dialog=UpdateDialog(self,self.runtime.updates);dialog.exec_();dialog.deleteLater()
 
-    def sample_info(self):
-        dialog=QDialog(self); dialog.setWindowTitle("示例空间"); dialog.setMinimumWidth(400); layout=box(dialog,margins=(25,25,25,25),spacing=16)
-        layout.addWidget(label("先逛一逛，再种自己的小事。","h2",True))
-        layout.addWidget(label("初始任务可供体验。\n你可以逐项删除，或清空全部任务重新开始。"+("\n工作任务支持导入自己的 Linear issues。" if self.runtime.profile.work else "\n学习任务可以生成或绑定课程。"),"muted",True))
-        keep=button("继续使用示例","primary",callback=dialog.reject); layout.addWidget(keep)
-        reset=button("清空全部任务，从零开始","outline"); layout.addWidget(reset)
-        def start_empty():
-            confirm=QMessageBox.question(dialog,"清空当前全部任务？","这会删除当前空间的所有任务，包括你新建的任务及关联。",QMessageBox.Yes|QMessageBox.No,QMessageBox.No)
-            if confirm!=QMessageBox.Yes: return
-            if not self.flush_editors(): return
-            if self.focus and not self.write(self.focus.clear_selection): return
-            if self.write(self.tasks.clear_samples):
-                self.selected=None; self.note_task_id=None; self.refresh(); dialog.accept()
-        reset.clicked.connect(start_empty); dialog.exec_()
-
     def open_daily(self):
         from daily_ui import DailyDialog
         if self.flush_editors(): DailyDialog(self).exec_()
+
+    def open_worklog(self,kind=None):
+        if not self.runtime.daily or not self.flush_editors():return
+        identifier=None
+        if kind:
+            result=[]
+            if not self.write(lambda:result.append(self.runtime.daily.worklog_start(kind))):return
+            identifier=result[0]['id']
+        from work_logs_ui import WorkLogsDialog
+        if self.worklog_dialog is None:self.worklog_dialog=WorkLogsDialog(self)
+        if identifier:self.worklog_dialog.choose(identifier)
+        self.worklog_dialog.show();self.worklog_dialog.raise_();self.worklog_dialog.activateWindow()
 
     def select_task_target(self):
         from daily_ui import TargetDialog
@@ -1056,7 +1180,7 @@ class Momo(QMainWindow):
         reveal_window(self)
 
     def background_busy(self):
-        return bool(self.runtime.station and self.runtime.station.workers or self.runtime.daily and self.runtime.daily.snapshot()["busy"] or self.runtime.learning and self.runtime.learning.revision()["busy"])
+        return bool(self.runtime.station and self.runtime.station.workers or self.runtime.daily and (self.runtime.daily.snapshot()["busy"] or self.runtime.daily.worklog_snapshot()["busy"]) or self.runtime.learning and self.runtime.learning.revision()["busy"])
 
     def exit_application(self):
         running=self.background_busy()
@@ -1078,6 +1202,7 @@ class Momo(QMainWindow):
         if not self.flush_editors(): event.ignore(); return
         if not self.exiting and self.tray.isVisible():
             if self.station_dialog: self.station_dialog.hide()
+            if self.worklog_dialog: self.worklog_dialog.hide()
             if self.mini: self.mini.hide()
             for dialog in self.learning_dialogs.values(): dialog.hide()
             self.details_dialog.hide()

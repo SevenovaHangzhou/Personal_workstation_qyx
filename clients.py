@@ -99,6 +99,11 @@ class FocusClient:
 
 
 class DailyClient:
+    def worklog_start(self,kind):return call('/DailyService/worklog_start',{'kind':kind})
+    def worklog_snapshot(self):return call('/DailyService/worklog_snapshot')
+    def worklog_text(self,identifier):return call('/DailyService/worklog_text',{'id':identifier})
+    def worklog_retry(self,identifier):return call('/DailyService/worklog_retry',{'id':identifier})
+    def worklog_cancel(self):return call('/DailyService/worklog_cancel')
     def report_text(self,day):return call('/DailyService/report_text',{'day':day})
     def retention_preview(self,cancel):return call('/DailyService/retention_preview',{'cancel':cancel})
     def retention_apply(self,identifier,cancel):return call('/DailyService/retention_apply',{'id':identifier,'cancel':cancel})

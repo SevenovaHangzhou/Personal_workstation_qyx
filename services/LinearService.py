@@ -4,7 +4,7 @@ from pathlib import Path
 from credentials import CredentialStore
 from typedefine.TypeDefine import CONTEXT_GROUP, CTX_DATA_PATH
 from framework import api
-from linear_support import fetch_my_issues, LinearError
+from linear_support import fetch_my_issues, LinearError, LocalIssueIndex
 from msgs.YomkMsgs import LinearCredentials, LinearPull, LinearImport, ImportIssues
 from services.base import MomoService, ok, require, request_data
 
@@ -29,8 +29,8 @@ class LinearService(MomoService):
             self.credential_notice = "本机凭据暂时无法读取，请重新配置密钥"
         self.install("/configure", self.configure, "LinearCredentials", "设置本次运行的 Linear API Key")
         self.install("/connection", self.connection, "None", "查看连接配置，不返回密钥")
-        self.install("/pull", self.pull, "LinearPull", "分页拉取当前用户被指派的 issues")
-        self.install("/import", self.import_selected, "LinearImport", "将所选已拉取 issues 导入工作任务")
+        self.install("/pull", self.pull, "LinearPull", "分页拉取 My Issues，仅返回本地缺少的工作任务")
+        self.install("/import", self.import_selected, "LinearImport", "仅为尚未关联本地任务的所选 issues 创建工作任务")
         self.install("/forget", self.forget, "None", "移除已保存的 Linear 凭据")
         self.alive = True
         return 0
@@ -80,6 +80,9 @@ class LinearService(MomoService):
             result = fetch_my_issues(key, pkg.include_closed, pkg.cancel_event)
         except LinearError as exc:
             return api.YomkResponse(api.ResStatus.eNo, str(exc))
+        local = LocalIssueIndex(request_data('/TaskService/list'))
+        missing = [issue for issue in result['issues'] if local.find(issue) is None]
+        result = dict(result, total=len(result['issues']), existing=len(result['issues'])-len(missing), issues=missing)
         self.cache = {issue["id"]: issue for issue in result["issues"]}
         self.viewer = result["viewer"]
         return ok(result)
@@ -88,7 +91,7 @@ class LinearService(MomoService):
         require(isinstance(pkg, LinearImport) and isinstance(pkg.issue_ids, list) and pkg.issue_ids, "请先勾选要导入的 issues")
         require(all(isinstance(i, str) and i in self.cache for i in pkg.issue_ids), "请重新拉取 issues 后选择导入")
         issues = [self.cache[i] for i in dict.fromkeys(pkg.issue_ids)]
-        return ok(request_data("/TaskService/import_issues", ImportIssues(issues)))
+        return ok(request_data("/TaskService/import_issues", ImportIssues(issues, only_new=True)))
 
     def deinit(self):
         with self.lock:

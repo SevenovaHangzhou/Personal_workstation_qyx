@@ -1,5 +1,4 @@
 import copy
-from urllib.parse import urlparse
 from framework import api
 from model import JsonTaskRepository, STATUSES, validate_task, parse_binding, make_task
 from msgs.YomkMsgs import (TaskId, CreateTask, UpdateTask, TaskStatus, StepInput,
@@ -185,12 +184,14 @@ class TaskService(MomoService):
         return ok(repos)
 
     def import_issues(self, pkg):
-        from linear_support import validate_issue
+        from linear_support import validate_issue, LocalIssueIndex, issue_link_key
         require(isinstance(pkg, ImportIssues) and isinstance(pkg.issues, list), "expected ImportIssues")
+        require(type(pkg.only_new) is bool, 'only_new must be a bool')
         require(len(pkg.issues) <= 10000, "单次导入数量过多")
         for issue in pkg.issues:
             validate_issue(issue)
         tasks = copy.deepcopy(self.repository.tasks)
+        local = LocalIssueIndex(tasks)
         result = {"created": 0, "updated": 0, "skipped": 0, "task_ids": []}
         seen = set()
         for issue in pkg.issues:
@@ -198,15 +199,13 @@ class TaskService(MomoService):
                 continue
             seen.add(issue["id"])
             binding = parse_binding("linear", issue["url"])
-            workspace = urlparse(issue["url"]).path.split("/")[1]
             def same_issue(item):
                 return (item["kind"] == "linear" and not item.get("demo")
-                        and parse_binding("linear", item["url"])["label"] == binding["label"]
-                        and urlparse(item["url"]).path.split("/")[1] == workspace)
-            task = next((t for t in tasks if t["category"] == "work" and (
-                t.get("linear_issue", {}).get("id") == issue["id"] or
-                (not any(b["kind"]=="linear" and not b.get("demo") for b in t["bindings"]) and t.get("unlinked_issue",{}).get("id")==issue["id"]) or
-                any(same_issue(b) for b in t["bindings"]))), None)
+                        and issue_link_key(item['url']) == issue_link_key(issue['url']))
+            task = local.find(issue)
+            if task is not None and pkg.only_new:
+                result['skipped'] += 1
+                continue
             if task is None:
                 task = make_task(issue["title"][:100], "work", day=issue.get("due_date") or None)
                 task["description"] = issue.get("description", "")
@@ -223,6 +222,7 @@ class TaskService(MomoService):
             self.repository.check_issue_mapping(task)
             task["linear_issue"] = copy.deepcopy(issue)
             task.pop("unlinked_issue", None)
+            local.add(task)
             result["task_ids"].append(task["id"])
         if result["created"] or result["updated"]:
             self.repository.replace_tasks(tasks)

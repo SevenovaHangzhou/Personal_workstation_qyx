@@ -21,6 +21,9 @@ class DailyService(MomoService):
         self.retention=Retention(self.store.folder.parent)
         self.engine = DailyEngine(self.store, tasks, lambda: daily_writer(linear.writer), station, bound_only=bound_only)
         self.engine.progress = self.progress
+        from work_logs import WorkLogs
+        self.execution_lock=threading.Lock()
+        self.work_logs=WorkLogs(self.store.folder/'work-logs',tasks,self.execution_lock)
         self.linear = linear
         self.auto_tick = auto_tick
         self.cancel = threading.Event(); self.wake = threading.Event()
@@ -34,6 +37,11 @@ class DailyService(MomoService):
         self.install('/snapshot', self.snapshot, 'None', '查看自动日报设置、到期日期和同步结果')
         self.install('/report_text',self.report_text,'dict','从保留的日报账本读取正文，兼容已清理的文件投影')
         self.install('/configure', self.configure, 'dict', '设置日报启停与用户已选择的 Linear 归属')
+        self.install('/worklog_start',self.worklog_start,'dict','后台生成本地今日日志或本周周报，不触发远端同步')
+        self.install('/worklog_snapshot',lambda pkg:self.worklog_request(pkg,'snapshot'),'None','查看手动工作日志进度与历史')
+        self.install('/worklog_text',lambda pkg:self.worklog_request(pkg,'text'),'dict','读取本地工作日志正文')
+        self.install('/worklog_retry',lambda pkg:self.worklog_request(pkg,'retry'),'dict','重试原周期工作日志')
+        self.install('/worklog_cancel',lambda pkg:self.worklog_request(pkg,'cancel_active'),'None','取消后台工作日志生成')
         self.install('/retry', self.retry, 'None', '补跑已到期日报及失败同步，不提前发布当前周期')
         # This handler performs read-only I/O on the caller's worker thread.
         self.install_func('/choices', self.choices, 'dict', '分页读取可选团队和项目；UI 在后台线程调用')
@@ -89,6 +97,17 @@ class DailyService(MomoService):
         require(pkg is None, 'expected None')
         self.manual = True; self.wake.set()
         return self.snapshot(None)
+
+    def worklog_start(self,pkg):
+        require(isinstance(pkg,dict) and set(pkg)=={'kind'} and pkg['kind'] in ('today','week'),'无效工作日志类型')
+        return ok(self.work_logs.start(pkg['kind']))
+
+    def worklog_request(self,pkg,action):
+        if action in ('snapshot','cancel_active'):
+            require(pkg is None,'expected None')
+            return ok(getattr(self.work_logs,action)())
+        require(isinstance(pkg,dict) and set(pkg)=={'id'} and isinstance(pkg['id'],str),'无效工作日志请求')
+        return ok(getattr(self.work_logs,action)(pkg['id']))
 
     def choices(self, pkg):
         try:
@@ -147,7 +166,9 @@ class DailyService(MomoService):
                     with self.lock:
                         self.busy = True; self.notice = '正在处理 '+target_day+' 日报'
                     try:
-                        self.engine.run(target_day, config, self.cancel)
+                        with self.execution_lock:
+                            if self.cancel.is_set(): break
+                            self.engine.run(target_day, config, self.cancel)
                         with self.lock:
                             current = self.store.get('config')
                             if target_day >= current['next_day']:
@@ -166,10 +187,12 @@ class DailyService(MomoService):
 
     def stop_clock(self):
         self.cancel.set(); self.wake.set()
+        self.work_logs.stop()
         if self.worker:
             self.worker.join(); self.worker = None
 
     def deinit(self):
         self.stop_clock()
         super().deinit()
+        self.work_logs.close()
         self.store.close()

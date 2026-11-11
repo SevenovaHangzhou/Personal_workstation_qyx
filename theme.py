@@ -37,6 +37,7 @@ QFrame#tutorPanel { background: #ffffff; border: 1px solid #dbe3ed; border-radiu
 QFrame#knowledgePanel { background: #e9f0f4; border: 1px solid #cdd9e3; border-radius: 12px; }
 QTextBrowser#knowledgeText { background: #e9f0f4; border: 0; padding: 3px; font-size: 13px; }
 QSplitter::handle:vertical { background: #edf2f7; }
+QTextBrowser#workLogPreview { background: #ffffff; border: 1px solid #dbe3ed; border-radius: 8px; padding: 12px; }
 QTextBrowser#tutorTranscript { background: #ffffff; border: 0; padding: 4px; font-size: 13px; }
 QPlainTextEdit#tutorQuestion { background: #f5f7fa; }
 QFrame#focus { background: #e9f0f4; border: 1px solid #dbe3ed; border-radius: 16px; }
@@ -56,28 +57,29 @@ QLabel#substepBadge { color: #426c83; font-size: 11px; font-weight: 500; }
 QLabel#contextBadge { color: #7d8b9b; font-size: 11px; }
 QLabel#contextTitle { color: #5f7488; font-size: 12px; }
 QLabel#dependencyHint { color: #8676a5; font-size: 11px; }
-QPushButton { border: 0; background: transparent; border-radius: 8px; padding: 7px 11px; }
-QPushButton:hover { background: #e7eff5; }
-QPushButton:pressed { background: #d4e0e9; }
-QPushButton:focus { outline: none; border: 1px solid #92adc1; }
-QPushButton#primary { background: #426c83; color: #ffffff; border-radius: 9px; font-weight: 500; padding: 9px 15px; }
-QPushButton#primary:hover { background: #34576e; }
-QPushButton#coral { background: #e7c697; color: #514738; border-radius: 10px; font-weight: 500; padding: 10px 15px; }
-QPushButton#coral:hover { background: #ddba87; }
+QPushButton { border: 1px solid #c5d2de; background: #ffffff; border-radius: 8px; padding: 7px 11px; }
+QPushButton:hover { background: #e7eff5; border-color: #92adc1; }
+QPushButton:pressed { background: #d4e0e9; border-color: #7b9ab0; }
+QPushButton:focus { outline: none; border-color: #426c83; }
+QPushButton#primary { background: #426c83; border-color: #426c83; color: #ffffff; border-radius: 9px; font-weight: 500; padding: 9px 15px; }
+QPushButton#primary:hover { background: #34576e; border-color: #34576e; }
+QPushButton#coral { background: #e7c697; border-color: #d8b482; color: #514738; border-radius: 10px; font-weight: 500; padding: 10px 15px; }
+QPushButton#coral:hover { background: #ddba87; border-color: #c89e66; }
 QPushButton#outline { border: 1px solid #cdd9e3; background: #ffffff; border-radius: 8px; }
 QPushButton#soft { background: #edf2f7; color: #5f7488; }
-QPushButton#linkButton { color: #5f7488; text-align: left; padding: 3px 0; font-size: 12px; }
+QPushButton#linkButton { color: #5f7488; text-align: left; padding: 3px 6px; font-size: 12px; }
 QPushButton#stepToggle { background: #edf2f7; color: #426c83; text-align: left; padding: 6px 8px; font-size: 11px; border-radius: 6px; }
 QPushButton#stepToggle:hover { background: #dce8f0; }
 QPushButton#stepToggle[expanded="true"] { background: #e1eaf1; }
-QPushButton#deleteButton { color: #af766e; font-size: 12px; padding: 4px 8px; }
+QPushButton#sectionToggle { color: #5f7488; text-align: left; padding: 7px 8px; border-radius: 6px; }
+QPushButton#deleteButton { color: #af766e; border-color: #d7b8b0; font-size: 12px; padding: 4px 8px; }
 QPushButton#deleteButton:hover { background: #f5e9e5; }
-QPushButton:disabled { color: #aebbc7; }
-QPushButton#nav { text-align: left; padding: 9px 13px; font-size: 13px; color: #5f7488; border-radius: 10px; }
-QPushButton#nav:checked { background: #dce8f0; color: #34576e; font-weight: 500; }
+QPushButton:disabled { color: #aebbc7; border-color: #e0e6ec; background: #f1f4f7; }
+QPushButton#nav { background: #f6f8fb; text-align: left; padding: 9px 13px; font-size: 13px; color: #5f7488; border-radius: 10px; }
+QPushButton#nav:checked { background: #dce8f0; border-color: #92adc1; color: #34576e; font-weight: 500; }
 QPushButton#nav:hover { background: #e7eff5; }
 QPushButton#filter { color: #5f7488; padding: 6px 11px; font-size: 12px; }
-QPushButton#filter:checked { background: #e7eff5; color: #34576e; }
+QPushButton#filter:checked { background: #e7eff5; border-color: #92adc1; color: #34576e; }
 QPushButton#iconButton { padding: 6px; border-radius: 7px; }
 QPushButton#statusDot { padding: 0; border: 1.5px solid #b5c7d5; border-radius: 9px; background: transparent; }
 QPushButton#statusDot[status="doing"] { border-color: #426c83; background: #dce8f0; }

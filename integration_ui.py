@@ -41,8 +41,8 @@ class LinearDialog(QDialog):
         self.resize(620, 650)
         self.setMinimumWidth(500)
         layout = box(self, margins=(25, 23, 25, 23), spacing=13)
-        layout.addWidget(label("把工作，接回自己的节奏。", "h2"))
-        layout.addWidget(label("拉取指派给我的 issues，勾选后导入工作任务。", "muted", True))
+        layout.addWidget(label('拉取 My Issues', 'h2'))
+        layout.addWidget(label('仅列出指派给我、且本地尚未创建任务的 issue，勾选后导入为工作任务。', 'muted', True))
         credentials = box(horizontal=True, spacing=8)
         self.key = QLineEdit()
         self.key.setEchoMode(QLineEdit.Password)
@@ -72,7 +72,7 @@ class LinearDialog(QDialog):
         self.pull_button = button("拉取 My Issues", "primary", "linear", color="#ffffff", callback=self.pull)
         actions.addWidget(self.pull_button)
         layout.addLayout(actions)
-        self.status = label("连接后拉取；相同 issue 会去重，不会覆盖已有的笔记与子步骤。", "muted", True)
+        self.status = label('已有任务（含子步骤、已完成事项）会自动跳过；不会更新已有任务。', 'muted', True)
         layout.addWidget(self.status)
         options = box(horizontal=True)
         self.select_all = QCheckBox("全选")
@@ -166,7 +166,11 @@ class LinearDialog(QDialog):
         else:
             self.issues = worker.result["issues"]
             self.render_issues()
-            self.status.setText(f"{worker.result['viewer']['name']} · 拉取到 {len(self.issues)} 个 issues" if self.issues else "My Issues 为空，可以勾选包含已完成事项后重新拉取。")
+            total=worker.result.get('total',len(self.issues));existing=worker.result.get('existing',0)
+            if total:
+                self.status.setText(f"{worker.result['viewer']['name']} · 待导入 {len(self.issues)} 项，已在本地 {existing} 项（已跳过）。" if self.issues else f'本次 My Issues 均已在本地，无需新增任务。已跳过 {existing} 项。')
+            else:
+                self.status.setText('My Issues 为空，可以勾选包含已完成事项后重新拉取。')
             self.update_connection()
         worker.deleteLater()
 
@@ -207,7 +211,10 @@ class LinearDialog(QDialog):
         except (ValueError, OSError) as exc:
             self.status.setText(str(exc))
             return
-        self.status.setText(f"已新增 {result['created']} 项，更新关联信息 {result['updated']} 项，跳过重复 {result['skipped']} 项。")
+        imported=set(issue_ids)
+        self.issues=[issue for issue in self.issues if issue['id'] not in imported]
+        self.render_issues()
+        self.status.setText(f"已新增 {result['created']} 项，跳过已在本地的 {result['skipped']} 项。")
         self.owner.view = "work"
         self.owner.status_filter = "all"
         self.owner.search.clear()

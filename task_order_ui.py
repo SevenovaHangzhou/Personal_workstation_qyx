@@ -48,10 +48,14 @@ class DraggableTaskCard(QFrame):
         drag.setPixmap(preview)
         drag.setHotSpot(press * (preview.width() / max(self.width(), 1)))
         self.owner.task_drag_active = True; self.owner.task_order_saved = False
+        independent=getattr(self.owner,'independent_drop',None)
+        if independent is not None and self.owner.runtime.profile.key=='work':
+            independent.setVisible(bool((self.owner.tasks.get(self.task_id) or {}).get('parent_id')))
         try:
             drag.exec_(Qt.MoveAction)
         finally:
             self.owner.task_drag_active = False
+            if independent is not None and self.owner.runtime.profile.key=='work': independent.hide()
             QTimer.singleShot(0, self.owner.finish_task_drag)
             drag.deleteLater()
 

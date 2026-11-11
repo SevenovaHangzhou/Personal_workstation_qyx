@@ -124,6 +124,7 @@ class LinearImport:
 @dataclass(frozen=True)
 class ImportIssues:
     issues: list
+    only_new: bool = False
 
 
 @dataclass(frozen=True)

@@ -120,8 +120,8 @@ Qt 后台线程发起读取，不持有 Task / Focus 锁等待 CLI。关闭时�
 | --- | --- | --- |
 | `/LinearService/configure` | LinearCredentials | 保存会话密钥；remember=True 时保存本机凭据，清除 issue 缓存 |
 | `/LinearService/connection` | None | 返回配置、记忆状态、存储方式和最近 viewer，不返回密钥 |
-| `/LinearService/pull` | LinearPull | 读取当前用户、分页拉取 assignedIssues，可取消 |
-| `/LinearService/import` | LinearImport | 只允许导入最近成功拉取缓存中的 issue ID |
+| `/LinearService/pull` | LinearPull | 分页读取当前用户 assignedIssues，可取消；按本地任务快照过滤已有关联，返回待导入项和跳过数量 |
+| `/LinearService/import` | LinearImport | 只允许导入最近成功拉取缓存中的 issue ID；TaskService 在锁内再次检查，仅创建缺少的任务 |
 | `/LinearService/forget` | None | 删除本机保存值与会话值，不修改进程环境变量 |
 
 `linear_support.py` 使用标准库 urllib，固定 HTTPS 终点 `https://api.linear.app/graphql`，个人 Key 放在 Authorization header，禁用重定向。检查 HTTP 与 GraphQL 错误，不展示包含凭证或服务器原文的错误；每个请求超时 15 秒，响应上限 8 MiB，最多 200 页、每页 50 项。分页校验 cursor、viewer 一致性和完整字段；失败或取消不返回部分结果。

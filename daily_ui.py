@@ -80,6 +80,7 @@ class DailyDialog(QDialog):
         self.enabled=QCheckBox('启用每日 22:00 日报、工作 issue 同步和本地 Git 留存')
         self.enabled.setChecked(self.client.snapshot()['config']['enabled']); self.enabled.toggled.connect(self.configure); layout.addWidget(self.enabled)
         row=box(horizontal=True); row.addWidget(button('选择默认团队 / 项目','outline',callback=self.target)); row.addWidget(button('补跑到期日报 / 重试','primary',callback=self.retry)); layout.addLayout(row)
+        layout.addWidget(button('查看手动工作日志与周报','outline',callback=self.worklogs))
         layout.addWidget(button('查看本地存储用量','linkButton',callback=self.storage))
         self.target_info=label('','muted',True); layout.addWidget(self.target_info)
         layout.addWidget(label('未完成代码任务：每日本地分支＋补丁及未跟踪文件快照；不自动提交、不切换当前分支。\n关闭主窗口后托盘继续；应用完全退出或电脑关闭期间不能运行，下次启动会补跑。','muted',True))
@@ -97,6 +98,9 @@ class DailyDialog(QDialog):
         layout.addWidget(button('打开本地日报文件夹','linkButton',callback=self.open_folder))
         layout.addWidget(button('关闭',callback=self.accept))
         self.timer=QTimer(self); self.timer.setInterval(1500); self.timer.timeout.connect(self.refresh); self.timer.start(); self.refresh()
+
+    def worklogs(self):
+        self.accept();self.owner.open_worklog()
 
     def configure(self, value):
         if self.owner.write(lambda:self.client.configure(enabled=value)): self.refresh()

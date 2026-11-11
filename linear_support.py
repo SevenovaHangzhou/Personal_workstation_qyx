@@ -4,6 +4,7 @@ import socket
 from datetime import date
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, build_opener, HTTPRedirectHandler
+from urllib.parse import urlparse
 from model import parse_binding
 
 QUERY = """query MomoMyIssues($after: String, $filter: IssueFilter) {
@@ -25,6 +26,36 @@ class LinearError(Exception):
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
+
+
+def issue_link_key(url):
+    binding = parse_binding('linear', url)
+    return urlparse(url).path.split('/')[1], binding['label']
+
+
+class LocalIssueIndex:
+    """Match real issue IDs or workspace + identifier, independent of title/slugs."""
+    def __init__(self, tasks):
+        self.ids = {}
+        self.links = {}
+        for task in tasks:
+            self.add(task)
+
+    def add(self, task):
+        if task['category'] != 'work':
+            return
+        bindings = [b for b in task['bindings'] if b['kind']=='linear' and not b.get('demo')]
+        metadata = [task.get('linear_issue', {})]
+        if not bindings:
+            metadata.append(task.get('unlinked_issue', {}))
+        for issue in metadata:
+            if issue.get('id'):
+                self.ids.setdefault(issue['id'], task)
+        for binding in bindings:
+            self.links.setdefault(issue_link_key(binding['url']), task)
+
+    def find(self, issue):
+        return self.ids.get(issue['id']) or self.links.get(issue_link_key(issue['url']))
 
 
 def graphql(api_key, variables, query=QUERY):

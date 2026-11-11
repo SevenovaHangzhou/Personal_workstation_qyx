@@ -212,6 +212,12 @@ class UiTests(unittest.TestCase):
         self.assertEqual(self.tasks.get(self.window.selected)["linear_issue"]["id"],"issue-1")
         self.assertIn("新增 2",dialog.status.text())
         self.assertEqual(dialog.key.text(),"")
+        self.assertEqual(dialog.checks,[])
+        self.assertFalse(dialog.import_button.isEnabled())
+        with patch('linear_support.graphql',return_value=page([issue(1),issue(2)])):
+            dialog.pull();self.wait_pull(dialog)
+        self.assertEqual(dialog.issues,[])
+        self.assertIn('均已在本地',dialog.status.text())
         dialog.reject(); dialog.deleteLater(); APP.processEvents()
 
     def test_pull_keeps_ui_responsive_and_close_cancels_safely(self):

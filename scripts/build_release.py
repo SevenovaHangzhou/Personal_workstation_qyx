@@ -64,6 +64,30 @@ def add_notices(bundle):
     return versions
 
 
+def check_desktop_dependencies(plugins, log_path, libraries=None):
+    """An offscreen smoke test cannot detect missing X11 plugin libraries."""
+    xcb=plugins/'platforms/libqxcb.so'
+    if not xcb.is_file():
+        raise RuntimeError('Qt xcb 桌面插件缺失：'+str(xcb))
+    env=dict(os.environ)
+    if libraries:
+        env['LD_LIBRARY_PATH']=str(libraries)
+    checks=[xcb]+sorted((plugins/'xcbglintegrations').glob('*.so'))
+    missing=set(); reports=[]
+    for plugin in checks:
+        result=subprocess.run(['ldd',str(plugin)],env=env,capture_output=True,text=True)
+        reports.append(str(plugin)+'\n'+result.stdout+result.stderr)
+        for row in result.stdout.splitlines():
+            if '=> not found' in row: missing.add(row.split('=>',1)[0].strip())
+        if result.returncode:
+            log_path.write_text('\n'.join(reports))
+            raise RuntimeError('Qt 桌面依赖检查失败：'+str(plugin))
+    log_path.write_text('\n'.join(reports))
+    if missing:
+        raise RuntimeError('Qt 桌面依赖缺失：'+', '.join(sorted(missing))+
+                           '。请补齐系统运行库后重新打包；Ubuntu 常用依赖：libxcb-xinerama0、libxkbcommon-x11-0。')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=ROOT/'release'/version())
@@ -83,6 +107,7 @@ def main():
     # ASCII import alias fixes PyQt5 wheels whose Qt prefix loses Unicode paths.
     # Reuse the installed local dependencies; do not download a second runtime.
     import PyQt5
+    check_desktop_dependencies(Path(PyQt5.__file__).resolve().parent/'Qt5/plugins',work/'desktop-source-dependencies.log')
     env = dict(os.environ); env['ORBIT_APP_PROFILE']=PROFILE.key; env['PYINSTALLER_CONFIG_DIR'] = str(work/'cache')
     with tempfile.TemporaryDirectory(prefix='orbit-build-imports-') as alias:
         site = Path(alias)/'site'; site.symlink_to(Path(PyQt5.__file__).resolve().parent.parent, target_is_directory=True)
@@ -92,6 +117,7 @@ def main():
                  '--distpath', str(work/'dist'), '--workpath', str(work/'pyinstaller'),
                  str(ROOT/'packaging/orbit.spec')], cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
     bundle = work/'dist'/SLUG
+    check_desktop_dependencies(bundle/'_internal/PyQt5/Qt5/plugins',work/'desktop-bundle-dependencies.log',bundle/'_internal')
     shutil.copy2(ROOT/'packaging/launch.sh', bundle/SLUG); (bundle/SLUG).chmod(0o755)
     shutil.copy2(ROOT/'packaging/ota-launch.sh', bundle/'ota-launch.sh')
     (bundle/'VERSION').write_text(release_version+'\n')
@@ -102,7 +128,7 @@ def main():
         +'数据：~/.local/share/Sevenova/'+PROFILE.data_name+'\n关闭窗口驻留托盘；从托盘完整退出后更新生效。\n',encoding='utf-8')
     probe_env = dict(os.environ); probe_env['QT_QPA_PLATFORM'] = 'offscreen'
     # Probe the frozen binary from a different working directory, without source imports.
-    for key in ('PYTHONPATH', 'PYTHONHOME', 'YOMK_PREFIX_PATH'):
+    for key in ('PYTHONPATH', 'PYTHONHOME', 'YOMK_PREFIX_PATH', 'LD_LIBRARY_PATH'):
         probe_env.pop(key, None)
     probe_env['PYINSTALLER_RESET_ENVIRONMENT'] = '1'
     with tempfile.TemporaryDirectory(prefix='orbit-package-test-') as temporary:
@@ -138,7 +164,7 @@ def main():
     (deb_root/'DEBIAN/control').write_text(
         f'Package: sevenova-{SLUG}\nVersion: {release_version}\nArchitecture: amd64\nMaintainer: Sevenova\n'
         f'Installed-Size: {size}\nSection: utils\nPriority: optional\n'
-        'Depends: libc6 (>= 2.35), libglib2.0-0, libgl1, libegl1, libx11-6, libxcb1, libxkbcommon-x11-0, libfontconfig1, git, libglib2.0-bin\n'
+        'Depends: libc6 (>= 2.35), libglib2.0-0, libgl1, libegl1, libx11-6, libxcb1, libxcb-xinerama0, libxkbcommon-x11-0, libfontconfig1, git, libglib2.0-bin\n'
         'Recommends: fonts-noto-cjk\nHomepage: https://github.com/SevenovaHangzhou/Personal_workstation_qyx\n'
         'Description: ORBIT native desktop task and learning application\n'
         ' Local tasks, progress records, Codex chat links, guided courses and nightly reports.\n')
@@ -168,7 +194,7 @@ def main():
                     source_commit=revision, built_at=datetime.now(timezone.utc).isoformat(),
                     python=platform.python_version(), pyinstaller=metadata.version('pyinstaller'),
                     runtime_packages=versions, artifacts=artifacts,
-                    verification=['frozen --version', 'frozen --self-test', 'offscreen startup/screenshot',
+                    verification=['Qt xcb and GL plugin dependency checks', 'frozen --version', 'frozen --self-test', 'offscreen startup/screenshot',
                                   'extracted portable --self-test', 'extracted Debian --self-test',
                                   'Debian-style command symlink --self-test',
                                   'frozen and extracted portable/Debian --self-test --graph (assets + product services)'],
