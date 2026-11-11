@@ -1,6 +1,6 @@
 # 应用下载 · 0.10.0
 
-[下载最新 Release](https://github.com/SevenovaHangzhou/Personal_workstation_qyx/releases/latest) · [版本说明](0.10.0/RELEASE_NOTES.md)
+[下载最新 Release](https://github.com/SevenovaHangzhou/Personal_workstation_qyx/releases/latest) · [版本说明](0.10.0/RELEASE_NOTES.md) · [Linear 使用手册](../docs/LINEAR_GUIDE.md)
 
 | 产品 | Linux x86_64 | Windows 10/11 x64 |
 |---|---|---|

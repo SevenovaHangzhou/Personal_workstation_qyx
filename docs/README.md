@@ -1,6 +1,6 @@
 # 工程文档
 
-- [使用说明](USAGE.md)
+- [使用说明](USAGE.md)、[Linear 关联本地任务手册](LINEAR_GUIDE.md)
 
 - [架构与服务](ARCHITECTURE.md)、[YomkGraph 运行图谱](YOMKGRAPH.md)
 - [主题与交互](DESIGN.md)、[品牌](BRAND_THEME.md)
