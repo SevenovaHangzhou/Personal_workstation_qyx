@@ -5,7 +5,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-MAINTAINED_PRODUCT = "work"
+MAINTAINED_PRODUCT = "study"
 
 
 def main():
