@@ -129,19 +129,19 @@ class ProductBoundaryTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(),before)
 
     def test_daily_only_indexes_bound_threads_and_rescans_new_bindings(self):
-        with tempfile.TemporaryDirectory() as directory:
-            folder=Path(directory); (folder/'codex/sessions').mkdir(parents=True)
-            store=DailyStore(folder/'daily'); self.addCleanup(store.close)
-            index=HistoryIndex(store,folder/'codex')
-            for thread in ('work','study'):
-                records=[{'type':'session_meta','payload':{'id':thread}}, {'timestamp':'2026-11-10T10:00:00Z','type':'response_item','payload':{'type':'message','role':'user','content':[{'type':'input_text','text':thread+' text'}]}}]
-                (folder/'codex/sessions'/(thread+'.jsonl')).write_text('\n'.join(json.dumps(r) for r in records)+'\n')
-            index.allowed_threads={'work'}; self.assertEqual(index.scan(threading.Event()),[])
-            self.assertEqual({r[0] for r in store.db.execute('SELECT DISTINCT thread FROM facts')},{'work'})
-            index.allowed_threads={'work','study'}; index.scan(threading.Event())
-            self.assertEqual({r[0] for r in store.db.execute('SELECT DISTINCT thread FROM facts')},{'work','study'})
-            index.allowed_threads={'work'}
-            self.assertEqual(set(index.between(cutoff('2026-11-09'),cutoff('2026-11-10'))),{'work'})
+        directory=self.enterContext(tempfile.TemporaryDirectory())
+        folder=Path(directory); (folder/'codex/sessions').mkdir(parents=True)
+        store=DailyStore(folder/'daily'); self.addCleanup(store.close)
+        index=HistoryIndex(store,folder/'codex')
+        for thread in ('work','study'):
+            records=[{'type':'session_meta','payload':{'id':thread}}, {'timestamp':'2026-11-10T10:00:00Z','type':'response_item','payload':{'type':'message','role':'user','content':[{'type':'input_text','text':thread+' text'}]}}]
+            (folder/'codex/sessions'/(thread+'.jsonl')).write_text('\n'.join(json.dumps(r) for r in records)+'\n')
+        index.allowed_threads={'work'}; self.assertEqual(index.scan(threading.Event()),[])
+        self.assertEqual({r[0] for r in store.db.execute('SELECT DISTINCT thread FROM facts')},{'work'})
+        index.allowed_threads={'work','study'}; index.scan(threading.Event())
+        self.assertEqual({r[0] for r in store.db.execute('SELECT DISTINCT thread FROM facts')},{'work','study'})
+        index.allowed_threads={'work'}
+        self.assertEqual(set(index.between(cutoff('2026-11-09'),cutoff('2026-11-10'))),{'work'})
 
     def test_ota_refuses_other_product_even_when_version_and_hash_match(self):
         from ota_core import validate_manifest, package_names

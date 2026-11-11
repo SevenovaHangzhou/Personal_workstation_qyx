@@ -3,6 +3,7 @@
 No service, model, or remote mutation runs here. A shared lock serializes both
 first launches; the old data lock must be free before any data is copied.
 """
+from contextlib import closing
 import copy
 import hashlib
 import json
@@ -62,7 +63,7 @@ def copy_space(source,target,ignore=None):
         if not output.exists(): continue
         output.unlink()
         for suffix in ('-wal','-shm','-journal'): Path(str(output)+suffix).unlink(missing_ok=True)
-        with sqlite3.connect(database.as_uri()+'?mode=ro',uri=True) as src, sqlite3.connect(output) as dst:
+        with closing(sqlite3.connect(database.as_uri()+'?mode=ro',uri=True)) as src, closing(sqlite3.connect(output)) as dst:
             src.backup(dst)
             if dst.execute('PRAGMA quick_check').fetchone()[0]!='ok': raise ValueError('数据库备份校验失败')
 
@@ -84,7 +85,16 @@ def partition_tasks(payload,key):
 
 def rebase_json(folder,source,target):
     def visit(value):
-        if isinstance(value,str) and value.startswith(str(source)+os.sep): return str(target)+value[len(str(source)):]
+        if isinstance(value,str):
+            if value.startswith(str(source)+os.sep): return str(target)+value[len(str(source)):]
+            # Windows temporary directories may use RUNNER~1 in saved paths,
+            # while resolve() expands that alias. Compare canonical paths too.
+            try:
+                candidate=Path(value)
+                if candidate.is_absolute():
+                    relative=candidate.resolve().relative_to(source.resolve())
+                    return str(target/relative)
+            except (OSError,ValueError,RuntimeError): pass
         if isinstance(value,list): return [visit(v) for v in value]
         if isinstance(value,dict): return {k:visit(v) for k,v in value.items()}
         return value
@@ -104,7 +114,7 @@ def prepare_products(source,backup,stage,transaction):
             dbpath=folder/'daily/daily.sqlite3'
             if dbpath.exists():
                 threads=bound_threads(data['tasks']); allowed_summaries=set()
-                with sqlite3.connect(dbpath) as db:
+                with closing(sqlite3.connect(dbpath)) as db, db:
                     for day,state,content,errors in db.execute('SELECT day,state,content,errors FROM reports').fetchall():
                         historical=[t for t in json.loads(content).get('tasks',[]) if t.get('category') in PROFILES['work'].categories]
                         threads.update(bound_threads(historical))
@@ -176,7 +186,7 @@ def split_data(source,home):
 
 def finish_split(home,record,journal):
     stage=Path(record['stage'])
-    if stage.parent!=home or not stage.name.startswith('.split-'): raise ValueError('迁移暂存路径无效')
+    if stage.parent.resolve()!=home.resolve() or not stage.name.startswith('.split-'): raise ValueError('迁移暂存路径无效')
     for key in ('work','study'):
         target=home/PROFILES[key].data_name; candidate=target if target.exists() else stage/target.name
         marker=json.loads((candidate/MARKER).read_text())

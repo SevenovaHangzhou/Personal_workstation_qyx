@@ -210,7 +210,10 @@ class TaskOrderUiTests(unittest.TestCase):
 
     def test_dragging_near_edges_scrolls_and_cleanup_stops_scrolling(self):
         for index in range(18): self.tasks.add(make_task(f"长列表 {index}", "demo"))
-        self.window.refresh(); QTest.qWait(20)
+        self.window.refresh()
+        for _ in range(150):
+            QTest.qWait(10)
+            if self.window.scroll.verticalScrollBar().maximum()>0: break
         area = self.window.list_host; source = area.cards()[0]
         enter = DragEnter(source, QPoint(5, source.y()), self.mime(source)); APP.sendEvent(area, enter)
         self.assertTrue(enter.isAccepted())
