@@ -1,37 +1,18 @@
-# 星序 ORBIT 发布
+# 应用下载 · 0.10.0
 
-当前版本：**0.9.8**。
+[下载最新 Release](https://github.com/SevenovaHangzhou/Personal_workstation_qyx/releases/latest) · [版本说明](0.10.0/RELEASE_NOTES.md)
 
-[下载安装包](https://github.com/SevenovaHangzhou/Personal_workstation_qyx/releases/latest) · [版本说明](0.9.8/RELEASE_NOTES.md)
+| 产品 | Linux x86_64 | Windows 10/11 x64 |
+|---|---|---|
+| 星序 / ORBIT | `sevenova-orbit_0.10.0_amd64.deb` / `orbit-0.10.0-linux-x86_64.tar.gz` | `orbit-0.10.0-windows-x86_64-setup.exe` / `.zip` |
+| 知序 / LUMA | `sevenova-luma_0.10.0_amd64.deb` / `luma-0.10.0-linux-x86_64.tar.gz` | `luma-0.10.0-windows-x86_64-setup.exe` / `.zip` |
 
-| 系统 | 安装版 | 便携版 |
-| --- | --- | --- |
-| Linux x86_64，glibc 2.35+ | `sevenova-orbit_0.9.8_amd64.deb` | `orbit-0.9.8-linux-x86_64.tar.gz` |
-| Windows 10 / 11 x64 | `orbit-0.9.8-windows-x86_64-setup.exe` | `orbit-0.9.8-windows-x86_64.zip` |
+安装包内置 Python 环境。Linux 需要 glibc 2.35+；Windows 安装无需管理员权限。便携包解压后运行 `orbit` / `luma`（Windows 为 `.exe`）。
 
-Linux 安装：`sudo apt install ./sevenova-orbit_0.9.8_amd64.deb`；便携包解压后运行 `orbit/orbit`。
-Windows 双击安装包，或解压便携包运行 `orbit.exe`。安装无需管理员权限，可选桌面快捷方式。
+升级前从旧版托盘完整退出。首次启动会备份并拆分原数据，分别存入 `Sevenova/OrbitWork` 和 `Sevenova/Luma`；卸载不删除数据。[迁移与恢复](../docs/APP_SPLIT.md)
 
-均内置 Python 环境。Codex CLI 与 Git 沿用本机配置；升级前从旧版托盘退出。
-数据位于 Linux `~/.local/share/Sevenova/Orbit`、Windows `%LOCALAPPDATA%/Sevenova/Orbit`；旧 Linux 数据自动迁移并保留兼容路径。
-包中不包含用户数据、聊天或登录凭据。卸载不删除用户数据。
+每款产品附平台清单和 SHA-256 校验文件。包中不含用户数据或凭据，Codex CLI 与 Git 沿用本机配置。Windows 安装包未进行商业代码签名。
 
-[OTA 更新](../OTA.md)在完整退出后切换，下次启动生效；原安装保留。Windows 凭据由 DPAPI 按当前系统用户加密，安装包尚未商业签名。
+## 源码构建
 
-## 构建
-
-Linux（Python 3.12、Git、dpkg-deb）：
-
-```bash
-python -m pip install -r packaging/requirements-release.txt -r packaging/requirements-build.txt
-python scripts/build_release.py
-```
-
-Windows x64（Python 3.12、Git、Inno Setup 6）：
-
-```powershell
-python -m pip install -r requirements.txt pyinstaller==6.22.3
-python scripts/build_windows.py
-```
-
-输出位于 `release/0.9.8/`。构建脚本验证冻结应用、解压后启动及隔离数据自检；Windows 还验证静默安装和卸载。GitHub Actions 在两个原生系统构建并校验 hash 后发布，源码库仅保留说明与校验清单。
+安装当前系统的构建依赖后，在 `main` 或 `luma` 分支运行 `python scripts/build_product.py`。输出位于 `release/0.10.0/`；构建会检查冻结应用与解包后的离线启动，Windows 另检查安装和卸载。[分支与构建约定](../docs/BRANCHES.md)
