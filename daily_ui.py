@@ -95,6 +95,8 @@ class DailyDialog(QDialog):
         self.pending_detail=label('','muted',True); pending_layout.addWidget(self.pending_detail)
         self.locate=button('定位工作任务','outline',callback=self.locate_task); pending_layout.addWidget(self.locate)
         self.pending.currentItemChanged.connect(self.show_pending)
+        from report_sharing_ui import open_report_sharing
+        layout.addWidget(button('LAN Mesh 日报周报共享','outline',callback=lambda:open_report_sharing(self.owner)))
         layout.addWidget(button('打开本地日报文件夹','linkButton',callback=self.open_folder))
         layout.addWidget(button('关闭',callback=self.accept))
         self.timer=QTimer(self); self.timer.setInterval(1500); self.timer.timeout.connect(self.refresh); self.timer.start(); self.refresh()

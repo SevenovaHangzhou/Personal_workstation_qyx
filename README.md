@@ -20,4 +20,4 @@
 
 两条分支均支持 Linux 和 Windows。运行 `python scripts/build_product.py` 构建当前分支的产品。
 
-[Linear 使用手册](docs/LINEAR_GUIDE.md) · [分支约定](docs/BRANCHES.md) · [数据迁移与恢复](docs/APP_SPLIT.md)
+[Linear 使用手册](docs/LINEAR_GUIDE.md) · [同事协作](docs/COLLABORATION.md) · [分支约定](docs/BRANCHES.md) · [数据迁移与恢复](docs/APP_SPLIT.md)

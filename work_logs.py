@@ -29,7 +29,7 @@ def render(content):
     start=datetime.fromisoformat(content['start']).astimezone(ZONE).strftime('%Y-%m-%d %H:%M')
     end=datetime.fromisoformat(content['end']).astimezone(ZONE).strftime('%Y-%m-%d %H:%M')
     lines=['# '+KINDS[content['kind']],'','统计范围：'+start+' → '+end+'（北京时间）','',
-           '仅本地保存 · 22:00 自动日报照常。','']
+           '本机生成 · 报告共享按 LAN Mesh 设置执行 · 22:00 自动日报照常。','']
     tasks={task['id']:task for task in content['tasks']}
     groups=content.get('groups',{})
     lines+=['聊天 '+str(len(groups))+' 个 · 文本消息 '+str(sum(len(messages) for messages in groups.values()))+' 条','']
@@ -154,7 +154,7 @@ class WorkLogs:
                         content['errors'].append('聊天 '+tid[:8]+' 摘要未完成：'+redact(str(exc)))
                 content['completed']=index+1;self._save(content)
             if cancel.is_set():raise InterruptedError('已取消生成，可重试')
-            content.update(state='pending' if content['errors'] else 'done',phase='部分内容未完成，可重试' if content['errors'] else '已生成，仅保存在本地')
+            content.update(state='pending' if content['errors'] else 'done',phase='部分内容未完成，可重试' if content['errors'] else '已生成，报告共享按设置执行')
         except InterruptedError as exc:content.update(state='cancelled',phase=str(exc))
         except Exception as exc:
             content.update(state='pending',phase='生成未完成，可重试')

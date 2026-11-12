@@ -73,6 +73,41 @@ class UpdateClient:
     def cancel(self): return call('/UpdateService/cancel', {})
 
 
+class JournalShareClient:
+    def snapshot(self): return call('/JournalShareService/snapshot', {})
+    def configure(self, name, department, sharing, shared_task_ids):
+        return call('/JournalShareService/configure', dict(name=name, department=department, sharing=sharing, shared_task_ids=shared_task_ids, confirmed=True))
+    def grant(self, label, full_reports=False):
+        return call('/JournalShareService/grant', dict(label=label, full_reports=full_reports, confirmed=True))
+    def revoke(self, identifier): return call('/JournalShareService/revoke', dict(id=identifier))
+
+
+class CollaborationClient:
+    def report_configure(self,enabled,admin_id,collect):return call('/CollaborationService/report_configure',dict(enabled=enabled,admin_id=admin_id,collect=collect,confirmed=True))
+    def chats(self,query='',archived=False,cancel_event=None):return call('/CollaborationService/chats',dict(query=query,archived=archived,cancel=cancel_event))
+    def knowledge_generate(self,project_id):return call('/CollaborationService/knowledge_generate',dict(project_id=project_id,confirmed=True))
+    def knowledge_cancel(self,project_id):return call('/CollaborationService/knowledge_cancel',dict(project_id=project_id))
+    def knowledge_apply(self,project_id,identifier,expected):return call('/CollaborationService/knowledge_apply',dict(project_id=project_id,id=identifier,expected=expected,confirmed=True))
+    def snapshot(self): return call('/CollaborationService/snapshot', {})
+    def configure(self, **settings): return call('/CollaborationService/configure', settings)
+    def action(self, operation, payload):
+        return call('/CollaborationService/action', dict(operation=operation, payload=payload, confirmed=True))
+    def generate(self, project_id, hours): return call('/CollaborationService/generate', dict(project_id=project_id, hours=hours))
+    def save_note(self, project_id, text, expected):return call('/CollaborationService/save_note',dict(project_id=project_id,text=text,expected=expected))
+    def save_draft(self, project_id, content): return call('/CollaborationService/save_draft', dict(project_id=project_id, content=content))
+    def cancel(self): return call('/CollaborationService/cancel', {})
+    def retry(self, identifier): return call('/CollaborationService/retry', {'id':identifier})
+    def entries(self, project_id, before=None):
+        return call('/CollaborationService/entries', dict(project_id=project_id, **({'before':before} if before else {})))
+    def watch(self, project_id): return call('/CollaborationService/watch', {'project_id':project_id})
+    def workspace(self, project_id, root='', new=False): return call('/CollaborationService/workspace',dict(project_id=project_id,root=root,new=new))
+    def knowledge_init(self, project_id, confirmed=False): return call('/CollaborationService/knowledge_init',dict(project_id=project_id,confirmed=confirmed))
+    def sync(self, project_id, operation, confirmed=False, preview_id=None):
+        return call('/CollaborationService/sync',dict(project_id=project_id,operation=operation,confirmed=confirmed,preview_id=preview_id))
+    def sync_cancel(self):return call('/CollaborationService/sync_cancel',{})
+    def refresh(self): return call('/CollaborationService/refresh', {})
+
+
 class LinearClient:
     def configure(self, api_key, remember=False): return call("/LinearService/configure", LinearCredentials(api_key, remember))
     def forget(self): return call("/LinearService/forget")

@@ -10,6 +10,7 @@ GROUPS = {
     '任务与专注': ['/TaskService', '/FocusService'],
     '外部集成': ['/BindingService', '/GitService', '/LinearService', '/CodexService'],
     '日报与学习': ['/DailyService', '/LearningService'],
+    '同事协作': ['/CollaborationService', '/JournalShareService'],
     '应用维护': ['/UpdateService'],
 }
 
@@ -105,9 +106,9 @@ class Observation:
         for module, services in GROUPS.items():
             collector.module(module, services)
         collector.module('应用入口与回调', ['@QtUI', '@UIWorker', '@Boot', '@Control', '@FocusClock',
-                       '@FocusEventLoop', '@DailyWorker', '@CourseWorker', '@TutorWorker', '@UpdateWorker'])
+                       '@FocusEventLoop', '@DailyWorker', '@CourseWorker', '@TutorWorker', '@UpdateWorker', '@CollaborationWorker'])
         collector.module('声明的外部依赖', ['@LinearAPI', '@CodexCLI', '@SQLite', '@LocalFiles',
-                         '@GitCLI', '@GitHub', '@EmbeddedStation'])
+                         '@GitCLI', '@GitHub', '@EmbeddedStation', '@LANPeer', '@LANDiscovery'])
         # These are architecture declarations, never claimed as measured I/O.
         for source, target, endpoint in [
             ('/TaskService', '@LocalFiles', '/tasks-json'),
@@ -119,6 +120,13 @@ class Observation:
             ('/LearningService', '@LocalFiles', '/courses-and-answers'),
             ('/LearningService', '@CodexCLI', '/exec'),
             ('/UpdateService', '@GitHub', '/release-metadata-and-assets'),
+            ('/CollaborationService', '@LANPeer', '/paired-pinned-https'),
+            ('/CollaborationService', '@LANDiscovery', '/udp-presence'),
+            ('/CollaborationService', '@LocalFiles', '/private-drafts-and-knowledge-replicas'),
+            ('/CollaborationService', '@CodexCLI', '/alignment-summary'),
+            ('/JournalShareService', '@LANPeer', '/evaluator-pinned-readonly-https'),
+            ('/JournalShareService', '@LANDiscovery', '/evaluator-udp-presence'),
+            ('/JournalShareService', '@SQLite', '/authorized-ended-report-projection'),
             ('@EmbeddedStation', '@SQLite', '/station-store'),
             ('@EmbeddedStation', '@CodexCLI', '/execution'),
         ]:
@@ -153,7 +161,7 @@ class Observation:
     def snapshot(self):
         result = self.observer.snapshot()
         result['warnings'].extend([
-            '星序仅观测 framework.api 的主实例：9 个业务服务与 5 个基础服务；工作站独立实例只展示边界，不合并服务表。',
+            '星序仅观测 framework.api 主实例当前产品加载的业务服务与基础服务；工作站和统一知识库的独立实例只展示边界，不合并服务表。',
             '@QtUI 为控制线程上的客户端请求；@UIWorker 为调用客户端的后台线程；未标注的入口仍为 @caller。',
             '@FocusEventLoop 是专注回调，@FocusClock 是投递时钟；日报/课程/答疑/更新 worker 已显式标注。',
             'request 耗时只计同步处理；kind=job 另计实际异步作业。direct-call 是显式 Python 调用，不是已注册的 request 功能。',

@@ -322,6 +322,7 @@ class Momo(QMainWindow):
             col.addSpacing(14); col.addWidget(label("进展与记录","section"))
             col.addWidget(button("需要我处理","nav",callback=self.open_attention))
             col.addWidget(button("日报与同步","nav",glyph="book",callback=self.open_daily))
+            col.addWidget(button("同事协作","nav",glyph="link",callback=self.open_collaboration))
             self.end_day_button=button('下班','nav',callback=lambda:self.open_worklog('today'))
             self.end_day_button.setAccessibleName('下班')
             self.end_day_button.setToolTip('后台总结今天 00:00 至当前的工作记录；仅本地保存，应用继续运行')
@@ -858,6 +859,8 @@ class Momo(QMainWindow):
                     actions.addWidget(button("绑定已有聊天","outline",callback=lambda checked=False:self.bind_task("codex")),1)
                 layout.addLayout(actions)
             self.detail_content.addWidget(card)
+            if kind=="codex" and task_chat:
+                self.detail_content.addWidget(button("与同事协作","outline",callback=lambda checked=False,i=task["id"]:self.open_collaboration(i)))
         if task["category"]=="work" and task.get("linear_issue"):
             issue=task["linear_issue"]
             self.detail_content.addWidget(label(issue["identifier"]+" · Linear："+issue["state_name"]+"\n"+issue.get("team", ""),"muted",True))
@@ -1069,6 +1072,15 @@ class Momo(QMainWindow):
         from preferences_ui import PreferencesDialog
         dialog=PreferencesDialog(self); dialog.exec_(); dialog.deleteLater()
 
+    def open_collaboration(self,task_id=None):
+        if not self.runtime.collaboration:return
+        dialog=getattr(self,'collaboration_dialog',None)
+        if dialog is None:
+            from collaboration_ui import CollaborationDialog
+            dialog=CollaborationDialog(self,task_id);self.collaboration_dialog=dialog
+        if task_id:dialog.task_id=task_id
+        dialog.show();dialog.raise_();dialog.activateWindow()
+
     def open_details(self):
         if not self.compact_layout: return
         screen=self.screen().availableGeometry()
@@ -1180,11 +1192,12 @@ class Momo(QMainWindow):
         reveal_window(self)
 
     def background_busy(self):
-        return bool(self.runtime.station and self.runtime.station.workers or self.runtime.daily and (self.runtime.daily.snapshot()["busy"] or self.runtime.daily.worklog_snapshot()["busy"]) or self.runtime.learning and self.runtime.learning.revision()["busy"])
+        collaboration=self.runtime.collaboration.snapshot() if self.runtime.collaboration else {}
+        return bool(self.runtime.station and self.runtime.station.workers or self.runtime.daily and (self.runtime.daily.snapshot()["busy"] or self.runtime.daily.worklog_snapshot()["busy"]) or self.runtime.learning and self.runtime.learning.revision()["busy"] or collaboration.get('busy') or collaboration.get('sync',{}).get('status') in ('prepare','upload','download'))
 
     def exit_application(self):
         running=self.background_busy()
-        work="正在执行的 Codex 任务和日报处理会停止，已有文件与记录会保留。" if self.runtime.profile.key=="work" else "课程生成和学习问答会停止，已有文件与记录会保留。"
+        work="正在执行的 Codex、日报和协作处理会停止，已有文件与记录会保留；项目锁将释放，断网时到期释放。" if self.runtime.profile.key=="work" else "课程生成和学习问答会停止，已有文件与记录会保留。"
         if running and QMessageBox.question(self,"停止执行并退出？",work,QMessageBox.Yes|QMessageBox.No,QMessageBox.No)!=QMessageBox.Yes: return
         self.exiting=True
         if self.close(): QApplication.instance().quit()
@@ -1201,6 +1214,8 @@ class Momo(QMainWindow):
             self.linear_dialog.reject(); event.ignore(); return
         if not self.flush_editors(): event.ignore(); return
         if not self.exiting and self.tray.isVisible():
+            collaboration=getattr(self,'collaboration_dialog',None)
+            if collaboration:collaboration.hide()
             if self.station_dialog: self.station_dialog.hide()
             if self.worklog_dialog: self.worklog_dialog.hide()
             if self.mini: self.mini.hide()
@@ -1212,6 +1227,8 @@ class Momo(QMainWindow):
             self.showMinimized(); event.ignore(); return
         for dialog in list(self.learning_dialogs.values()):
             if not dialog.close(): event.ignore(); return
+        collaboration=getattr(self,'collaboration_dialog',None)
+        if collaboration and not collaboration.close():event.ignore();return
         if not self.pause_focus(): event.ignore(); return
         self.tick_timer.stop()
         if self.mini: self.mini.close()

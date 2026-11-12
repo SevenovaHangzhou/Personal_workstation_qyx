@@ -25,7 +25,8 @@ SLUG=PROFILE.slug
 MANIFEST="luma-manifest.json" if SLUG=="luma" else "manifest.json"
 SUMS="LUMA-SHA256SUMS" if SLUG=="luma" else "SHA256SUMS"
 RUNTIME_PACKAGES = ['PyQt5', 'PyQt5-Qt5', 'PyQt5-sip', 'readerwriterlock',
-                    'typing_extensions', 'starlette', 'anyio', 'idna']
+                    'typing_extensions', 'starlette', 'anyio', 'idna',
+                    'cryptography', 'cffi', 'pycparser', 'psutil']
 
 
 def version():

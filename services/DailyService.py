@@ -35,6 +35,7 @@ class DailyService(MomoService):
             config = {'enabled':True, 'activated':False, 'target':{}, 'next_day':datetime.now(ZONE).date().isoformat()}
             self.store.put('config', config)
         self.install('/snapshot', self.snapshot, 'None', '查看自动日报设置、到期日期和同步结果')
+        self.install('/report_files',self.report_files,'dict','只列出可共享的已结束日报周报文件，不包含数据库与原始记录')
         self.install('/report_text',self.report_text,'dict','从保留的日报账本读取正文，兼容已清理的文件投影')
         self.install('/configure', self.configure, 'dict', '设置日报启停与用户已选择的 Linear 归属')
         self.install('/worklog_start',self.worklog_start,'dict','后台生成本地今日日志或本周周报，不触发远端同步')
@@ -86,6 +87,20 @@ class DailyService(MomoService):
         self.store.put('config', config)
         self.wake.set()
         return self.snapshot(None)
+
+    def report_files(self,pkg):
+        require(pkg=={},'报告目录请求无效')
+        require(not self.busy,'自动日报正在更新，保留管理员端上次收集的版本，完成后重试')
+        from collaboration.reports import DAY,LOG
+        with self.store.lock:
+            daily=self.store.db.execute('SELECT day,state FROM reports').fetchall()
+        result=[day+'.md' for day,state in daily if state in ('done','pending') and re.fullmatch(DAY,day)]
+        manager=self.work_logs
+        with manager.lock,manager.store.lock:
+            rows=manager.store.db.execute('SELECT day,state FROM reports').fetchall()
+            result.extend('work-logs/'+key+'.md' for key,state in rows
+                          if state in ('done','pending') and key!=manager.active and re.fullmatch(LOG,key))
+        return ok(sorted(result))
 
     def report_text(self,pkg):
         require(isinstance(pkg,dict) and set(pkg)=={'day'} and isinstance(pkg['day'],str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}',pkg['day']),'无效日报日期')

@@ -6,6 +6,7 @@ from observation import Observation, caller
 from boot.MomoBoot import MomoBoot
 from clients import TaskClient, FocusClient, LinearClient, CodexClient, DailyClient, LearningClient
 from clients import UpdateClient
+from clients import CollaborationClient, JournalShareClient
 from typedefine.TypeDefine import CONTEXT_GROUP, FOCUS_LOOP
 
 
@@ -29,11 +30,15 @@ class MomoRuntime:
         self.daily = DailyClient() if self.profile.work else None
         self.learning = LearningClient() if self.profile.study else None
         self.updates = UpdateClient()
+        self.collaboration = CollaborationClient() if self.profile.work else None
+        self.journal_share = JournalShareClient() if self.profile.work else None
         self.started = False
         self.station = None
         self.daily_service = None
         self.learning_service = None
         self.update_service = None
+        self.collaboration_service = None
+        self.journal_share_service = None
         self._data_lock = None
         self.graph = Observation(api, graph_port) if graph_port is not None else None
 
@@ -79,6 +84,21 @@ class MomoRuntime:
                     raise RuntimeError("日报服务启动失败")
                 self.boot.registered.append("/DailyService")
                 self.daily_service.start_clock()
+                from evaluation.sharing import JournalShareService
+                self.journal_share_service = JournalShareService(api.server(), self.path.parent/'evaluation', self.tasks, self.daily_service)
+                if api.add_service(self.journal_share_service, '/JournalShareService') != 0:
+                    raise RuntimeError('评估员日志共享服务启动失败')
+                self.boot.registered.append('/JournalShareService')
+                self.journal_share_service.start()
+                from services.CollaborationService import CollaborationService
+                from collaboration.reports import ReportFolder
+                from services.base import request_data
+                report_folder=ReportFolder(self.path.parent/'daily',lambda:request_data('/DailyService/report_files',{}))
+                self.collaboration_service = CollaborationService(api.server(), self.path.parent/'collaboration', self.tasks,report_folder=report_folder)
+                if api.add_service(self.collaboration_service, '/CollaborationService') != 0:
+                    raise RuntimeError('同事协作服务启动失败')
+                self.boot.registered.append('/CollaborationService')
+                self.collaboration_service.start()
             if self.profile.study:
                 from services.LearningService import LearningService
                 self.learning_service = LearningService(api.server(), self.path.parent / "learning", self.tasks)
@@ -120,6 +140,8 @@ class MomoRuntime:
             attempt("停止观测 HTTP", self.graph.stop_http)
         # Stop all producers before removing services or restoring request().
         for label, service, method in [
+            ("评估员共享线程", self.journal_share_service, "stop"),
+            ("协作线程", self.collaboration_service, "stop"),
             ("更新线程", self.update_service, "stop"),
             ("学习线程", self.learning_service, "stop"),
             ("日报线程", self.daily_service, "stop_clock"),
@@ -144,10 +166,10 @@ class MomoRuntime:
             # while the observer and all business services still exist.
             attempt("框架异步池", lambda: api.server().executor.shutdown(wait=True))
         live = []
-        for service in (self.update_service, self.daily_service, self.learning_service, self.station, focus):
+        for service in (self.journal_share_service, self.collaboration_service, self.update_service, self.daily_service, self.learning_service, self.station, focus):
             if service is None:
                 continue
-            for name in ('worker', 'clock', 'thread'):
+            for name in ('worker', 'clock', 'thread', 'summary_worker', 'sync_worker'):
                 thread = getattr(service, name, None)
                 if isinstance(thread, threading.Thread) and thread.is_alive(): live.append(name)
             workers = getattr(service, 'workers', {})

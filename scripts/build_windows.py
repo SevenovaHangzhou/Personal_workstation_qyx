@@ -43,7 +43,7 @@ def main():
     shutil.copy2(ROOT/'assets'/(SLUG+'.ico'),bundle/(SLUG+'.ico'))
     (bundle/'README.txt').write_text(PROFILE.display_name+' '+APP_VERSION+'\n运行 '+SLUG+'.exe。Windows 10/11 x64。无需安装 Python。\n数据：%LOCALAPPDATA%/Sevenova/'+PROFILE.data_name+'\n',encoding='utf-8')
     licenses=bundle/'licenses';licenses.mkdir(exist_ok=True)
-    for name in ('PyQt5','PyQt5-Qt5','PyQt5-sip','readerwriterlock','typing_extensions','starlette','anyio','idna','tzdata','Send2Trash','pyinstaller'):
+    for name in ('PyQt5','PyQt5-Qt5','PyQt5-sip','readerwriterlock','typing_extensions','starlette','anyio','idna','tzdata','Send2Trash','cryptography','cffi','pycparser','psutil','pyinstaller'):
         dist=metadata.distribution(name)
         for relative in dist.files or []:
             if any(word in relative.name.upper() for word in ('LICENSE','COPYING','NOTICE')):

@@ -36,6 +36,10 @@ flowchart TD
 
 ## 模块职责
 
+工作版可选加载 `/CollaborationService`：Qt 通过 `CollaborationClient` 读取内存快照，网络、指定聊天摘要与文件传输使用独立可停止线程。默认停用；知序不加载。LAN Mesh presence 适配器只广播发现信息，不启动上游分布式 Worker。
+
+工作版 `/CollaborationService` 管理 LAN Mesh 发现、双方核对配对码、任务与聊天关联及后台直连。复用固定版本 LAN Mesh 数据包和子网广播选择，TLS 指纹在发送前校验，消息使用设备密钥签名；监听入口通过 Yomk 请求回到服务校验权限。双方确认协作后各建轻量知识库，已共享版本自动同步为对方的独立本地副本。预览确认、哈希校验和不可变版本防止覆盖；原始聊天不传输，不接管代码工作区，不依赖第三方服务器。旧服务端源码只用于历史兼容，桌面入口不加载。使用见 [COLLABORATION.md](COLLABORATION.md)。
+
 `main.py` 负责控件、筛选展示、交互和系统链接打开。`integration_ui.py` 提供 Linear / Git 原生对话框，`codex_ui.py` 提供历史推荐与新建空聊天对话框，`ui_helpers.py` 提供共用控件构造器。窗口中的 250 ms QTimer 只刷新服务快照；实际计时不依赖 Qt 事件循环。
 
 `clients.py` 是请求适配器，将 Python 调用转换为明确的消息对象与 `/Service/function` 请求。响应以 `ResStatus.eOk` 判定成功，业务错误转成 ValueError，运行或持久化失败转成 OSError，交给界面处理。

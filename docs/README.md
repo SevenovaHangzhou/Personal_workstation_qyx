@@ -1,6 +1,8 @@
 # 工程文档
 
 - [使用说明](USAGE.md)、[Linear 关联本地任务手册](LINEAR_GUIDE.md)
+- [同事协作与知识库本地副本](COLLABORATION.md)
+- [轻量协作笔记：围绕一个问题整理上下文](PROJECT_KNOWLEDGE_STANDARD.md)
 
 - [架构与服务](ARCHITECTURE.md)、[YomkGraph 运行图谱](YOMKGRAPH.md)
 - [主题与交互](DESIGN.md)、[品牌](BRAND_THEME.md)
