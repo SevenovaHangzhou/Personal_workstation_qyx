@@ -4,7 +4,9 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import threading
 import unittest
+import zipfile
 from unittest.mock import patch
 
 from packaging_product import build_product
@@ -43,3 +45,19 @@ class EvaluatorPackagingTests(unittest.TestCase):
         result=subprocess.run([__import__('sys').executable,str(ROOT/'evaluator.py'),'--version'],
                               capture_output=True,text=True,timeout=20,check=True)
         self.assertIn('EVALUATOR '+APP_VERSION,result.stdout)
+
+    def test_evaluator_zip_has_explicit_identity_and_preserves_path_guards(self):
+        from ota_core import extract_windows_package
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);archive=root/'package.zip'
+            with zipfile.ZipFile(archive,'w') as package:
+                for name in ['orbit-evaluator.exe','orbit-evaluator-bin.exe']:
+                    package.writestr('orbit-evaluator/'+name,b'fixture')
+            with self.assertRaises(ValueError):
+                extract_windows_package(archive,root/'wrong',threading.Event())
+            result=extract_windows_package(archive,root/'right',threading.Event(),expected_slug='orbit-evaluator')
+            self.assertEqual(result.name,'orbit-evaluator')
+            with zipfile.ZipFile(archive,'a') as package:
+                package.writestr('orbit-evaluator/../outside.txt',b'fixture')
+            with self.assertRaises(ValueError):
+                extract_windows_package(archive,root/'unsafe',threading.Event(),expected_slug='orbit-evaluator')

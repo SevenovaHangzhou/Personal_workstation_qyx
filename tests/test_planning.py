@@ -1,5 +1,6 @@
 """Dependency integrity, atomic service writes, and native planning interaction."""
 import copy
+import gc
 import json
 import os
 import sys
@@ -65,6 +66,9 @@ class PlanningTests(unittest.TestCase):
             self.window.deleteLater()
             APP.processEvents()
         self.runtime.close()
+        # Windows keeps closed SQLite resources alive until cyclic cursors and
+        # callbacks are collected; finish their lifetime before removing data.
+        gc.collect()
         self.temp.cleanup()
 
     def rows(self):

@@ -86,7 +86,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='orbit-win-zip-') as temporary:
         import threading
         from ota_core import extract_windows_package
-        extracted=extract_windows_package(archive,Path(temporary),threading.Event())
+        extracted=extract_windows_package(archive,Path(temporary),threading.Event(),expected_slug=SLUG)
         probe(extracted,'portable')
     iscc=shutil.which('ISCC.exe') or str(Path(os.environ.get('ProgramFiles(x86)','C:/Program Files (x86)'))/'Inno Setup 6/ISCC.exe')
     command([iscc,'/DAppVersion='+APP_VERSION,'/DAppSlug='+SLUG,'/DAppIcon='+PROFILE.icon_slug,'/DAppName='+PROFILE.name+' '+PROFILE.wordmark,'/DProductId='+PROFILE.app_id,'/DBundleDir='+str(bundle),'/DOutputDir='+str(output),str(ROOT/'packaging/windows-installer.iss')])

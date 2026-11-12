@@ -255,13 +255,15 @@ def stage_release(folder, release, event, progress, source=None):
         return stamp
 
 
-def extract_windows_package(archive_path,destination,event):
+def extract_windows_package(archive_path,destination,event,expected_slug=None):
+    package_slug=SLUG if expected_slug is None else expected_slug
+    if package_slug not in ('orbit','luma','orbit-evaluator'):raise ValueError('无效应用包标识')
     destination=Path(destination);seen=set();total=0
     reserved={'CON','PRN','AUX','NUL',*(f'COM{i}' for i in range(1,10)),*(f'LPT{i}' for i in range(1,10))}
     with zipfile.ZipFile(archive_path) as archive:
         for member in archive.infolist():
             cancelled(event);path=PurePosixPath(member.filename);key=member.filename.casefold()
-            if (path.is_absolute() or not path.parts or path.parts[0]!=SLUG or '..' in path.parts
+            if (path.is_absolute() or not path.parts or path.parts[0]!=package_slug or '..' in path.parts
                 or '\\' in member.filename or ':' in member.filename or key in seen or len(seen)>=20000
                 or any(part.rstrip(' .')!=part or part.split('.')[0].upper() in reserved for part in path.parts)
                 or (member.external_attr>>16)&0o170000==0o120000):raise ValueError('Windows 更新包包含不安全路径')
@@ -272,6 +274,6 @@ def extract_windows_package(archive_path,destination,event):
             else:
                 target.parent.mkdir(parents=True,exist_ok=True)
                 with archive.open(member) as source,target.open('xb') as output:shutil.copyfileobj(source,output)
-    root=destination/SLUG
-    if any(not (root/name).is_file() for name in (SLUG+'.exe',SLUG+'-bin.exe')):raise ValueError('Windows 更新包缺少启动文件')
+    root=destination/package_slug
+    if any(not (root/name).is_file() for name in (package_slug+'.exe',package_slug+'-bin.exe')):raise ValueError('Windows 更新包缺少启动文件')
     return root
