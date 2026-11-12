@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+          ref: ${{ github.sha }}
       - id: sources
         name: Resolve fixed administrator source
         run: |
@@ -151,6 +151,7 @@ jobs:
           from typedefine.TypeDefine import APP_VERSION
           assert os.environ['RELEASE_TAG']=='v'+APP_VERSION
           main_commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          Path('artifacts/release-build-sources.json').write_text(json.dumps({'version':APP_VERSION,'work_commit':main_commit,'study_commit':main_commit,'evaluator_commit':os.environ['EVALUATOR_COMMIT'],'workflow_commit':os.environ['GITHUB_SHA']},indent=2)+'\n')
           root=Path('artifacts')
           for product,prefix,app_id in [('work','','com.sevenova.Orbit'),('study','luma-','com.sevenova.Luma'),('evaluator','evaluator-','com.sevenova.OrbitEvaluator')]:
               for platform,base,sums_name in [('linux-x86_64','manifest.json','SHA256SUMS'),('windows-x86_64','windows-manifest.json','WINDOWS-SHA256SUMS')]:
