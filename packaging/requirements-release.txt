@@ -6,3 +6,6 @@ typing_extensions==4.16.0
 starlette==0.52.1
 anyio==4.15.1
 idna==3.20
+cryptography==50.0.2
+cffi==2.1.1
+pycparser==3.12

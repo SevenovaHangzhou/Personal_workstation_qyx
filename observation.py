@@ -11,6 +11,7 @@ GROUPS = {
     '外部集成': ['/BindingService', '/GitService', '/LinearService', '/CodexService'],
     '日报与学习': ['/DailyService', '/LearningService'],
     '应用维护': ['/UpdateService'],
+    '日志评估': ['/EvaluationService'],
 }
 
 
@@ -107,7 +108,7 @@ class Observation:
         collector.module('应用入口与回调', ['@QtUI', '@UIWorker', '@Boot', '@Control', '@FocusClock',
                        '@FocusEventLoop', '@DailyWorker', '@CourseWorker', '@TutorWorker', '@UpdateWorker'])
         collector.module('声明的外部依赖', ['@LinearAPI', '@CodexCLI', '@SQLite', '@LocalFiles',
-                         '@GitCLI', '@GitHub', '@EmbeddedStation'])
+                         '@GitCLI', '@GitHub', '@EmbeddedStation', '@LANMesh'])
         # These are architecture declarations, never claimed as measured I/O.
         for source, target, endpoint in [
             ('/TaskService', '@LocalFiles', '/tasks-json'),
@@ -119,6 +120,9 @@ class Observation:
             ('/LearningService', '@LocalFiles', '/courses-and-answers'),
             ('/LearningService', '@CodexCLI', '/exec'),
             ('/UpdateService', '@GitHub', '/release-metadata-and-assets'),
+            ('/EvaluationService', '@LANMesh', '/authorized-journals-and-online-reports'),
+            ('/EvaluationService', '@SQLite', '/replicas-and-local-issue-ledger'),
+            ('/EvaluationService', '@CodexCLI', '/explicit-evidence-query'),
             ('@EmbeddedStation', '@SQLite', '/station-store'),
             ('@EmbeddedStation', '@CodexCLI', '/execution'),
         ]:

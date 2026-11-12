@@ -265,7 +265,7 @@ class Momo(QMainWindow):
         self.view="today"; self.status_filter="all"; self.list_mode="list"
         self.expanded_tasks=set(); self.collapsed_tasks=set(); self.outline_filter=None
         self.task_drag_active=False; self.task_order_saved=False
-        self.open_sections=set(); self.worklog_dialog=None
+        self.open_sections=set(); self.worklog_dialog=None; self.evaluation_dialog=None
         self.mini=None; self.linear_dialog=None; self.binding_dialog=None; self.nav_buttons={}; self.note_task_id=None
         self.station_dialog=None; self.learning_dialogs={}; self.exiting=False
         self.seen_completion=self.focus.snapshot()["completion_serial"] if self.focus else 0; self.shown_focus_error=""
@@ -295,6 +295,7 @@ class Momo(QMainWindow):
         if self.runtime.profile.work:
             menu.addAction("需要我处理",self.open_attention)
             menu.addAction("日报与同步",self.open_daily)
+            menu.addAction("日志评估",self.open_evaluation)
         menu.addAction('应用更新',self.open_updates)
         menu.addSeparator()
         menu.addAction("停止执行并退出",self.exit_application)
@@ -329,6 +330,7 @@ class Momo(QMainWindow):
             self.weeklog_button=button('总结周报','nav',callback=lambda:self.open_worklog('week'))
             self.weeklog_button.setToolTip('统计本周一 00:00 至当前；仅本地保存')
             col.addWidget(self.weeklog_button)
+            col.addWidget(button('日志评估','nav',callback=self.open_evaluation))
         col.addStretch()
         quiet=QFrame(); quiet.setObjectName("quiet"); quiet.setMinimumHeight(54); q=box(quiet,margins=(13,12,13,12),spacing=8)
         self.sidebar_done=label("","muted",True); q.addWidget(self.sidebar_done)
@@ -1138,6 +1140,12 @@ class Momo(QMainWindow):
         if identifier:self.worklog_dialog.choose(identifier)
         self.worklog_dialog.show();self.worklog_dialog.raise_();self.worklog_dialog.activateWindow()
 
+    def open_evaluation(self):
+        if not self.runtime.evaluation or not self.flush_editors(): return
+        from evaluation_ui import EvaluationDialog
+        if self.evaluation_dialog is None: self.evaluation_dialog=EvaluationDialog(self)
+        self.evaluation_dialog.show(); self.evaluation_dialog.raise_(); self.evaluation_dialog.activateWindow()
+
     def select_task_target(self):
         from daily_ui import TargetDialog
         task=self.tasks.get(self.selected)
@@ -1180,7 +1188,8 @@ class Momo(QMainWindow):
         reveal_window(self)
 
     def background_busy(self):
-        return bool(self.runtime.station and self.runtime.station.workers or self.runtime.daily and (self.runtime.daily.snapshot()["busy"] or self.runtime.daily.worklog_snapshot()["busy"]) or self.runtime.learning and self.runtime.learning.revision()["busy"])
+        evaluation=self.runtime.evaluation.snapshot() if self.runtime.evaluation else {}
+        return bool(evaluation.get('syncing') or evaluation.get('query',{}).get('busy') or evaluation.get('reports',{}).get('busy') or self.runtime.station and self.runtime.station.workers or self.runtime.daily and (self.runtime.daily.snapshot()["busy"] or self.runtime.daily.worklog_snapshot()["busy"]) or self.runtime.learning and self.runtime.learning.revision()["busy"])
 
     def exit_application(self):
         running=self.background_busy()
@@ -1203,6 +1212,7 @@ class Momo(QMainWindow):
         if not self.exiting and self.tray.isVisible():
             if self.station_dialog: self.station_dialog.hide()
             if self.worklog_dialog: self.worklog_dialog.hide()
+            if self.evaluation_dialog: self.evaluation_dialog.hide()
             if self.mini: self.mini.hide()
             for dialog in self.learning_dialogs.values(): dialog.hide()
             self.details_dialog.hide()
@@ -1216,6 +1226,7 @@ class Momo(QMainWindow):
         self.tick_timer.stop()
         if self.mini: self.mini.close()
         if self.station_dialog: self.station_dialog.close()
+        if self.evaluation_dialog: self.evaluation_dialog.close()
         self.tray.hide()
         event.accept()
 
@@ -1275,6 +1286,9 @@ def main():
         window=Momo(runtime,display)
         if activation: activation.requested.connect(lambda startup_id: reveal_window(window,startup_id))
         window.show()
+        if os.environ.get('ORBIT_EVALUATOR_BUILD')=='1':
+            window.setWindowTitle('星序 · 日志评估开发版')
+            QTimer.singleShot(0,window.open_evaluation)
         apply_update=True
         QTimer.singleShot(0,runtime.update_service.mark_started)
         if args.screenshot:

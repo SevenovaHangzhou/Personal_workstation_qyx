@@ -24,11 +24,12 @@ def run_checks(app,window_factory,graph_port=None):
             if PROFILE.key=='work':
                 assert runtime.learning is None and runtime.focus is None
                 assert not names.intersection({'/LearningService','/FocusService'})
-                assert {'/LinearService','/CodexService','/DailyService','/GitService'}<=names
+                assert {'/LinearService','/CodexService','/DailyService','/GitService','/EvaluationService'}<=names
+                assert runtime.evaluation.snapshot()['config']['sharing'] is False
                 assert window.focus_card.isHidden() and window.detail_focus.isHidden()
             else:
                 assert runtime.daily is None and runtime.station is None and runtime.codex is None
-                assert not names.intersection({'/LinearService','/CodexService','/DailyService','/GitService'})
+                assert not names.intersection({'/LinearService','/CodexService','/DailyService','/GitService','/EvaluationService'})
                 from learning_content import BUILTIN_COURSE_ID
                 from learning_ui import CourseReader
                 runtime.learning.bind(task['id'],BUILTIN_COURSE_ID)

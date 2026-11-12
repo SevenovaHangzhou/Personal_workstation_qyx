@@ -1,11 +1,12 @@
 """Main-thread lifecycle coordinator for application services and the clock."""
 import threading
+import os
 from pathlib import Path
 from framework import api
 from observation import Observation, caller
 from boot.MomoBoot import MomoBoot
 from clients import TaskClient, FocusClient, LinearClient, CodexClient, DailyClient, LearningClient
-from clients import UpdateClient
+from clients import UpdateClient, EvaluationClient
 from typedefine.TypeDefine import CONTEXT_GROUP, FOCUS_LOOP
 
 
@@ -27,6 +28,7 @@ class MomoRuntime:
         self.linear = LinearClient() if self.profile.work else None
         self.codex = CodexClient() if self.profile.work else None
         self.daily = DailyClient() if self.profile.work else None
+        self.evaluation = EvaluationClient() if self.profile.work else None
         self.learning = LearningClient() if self.profile.study else None
         self.updates = UpdateClient()
         self.started = False
@@ -34,6 +36,7 @@ class MomoRuntime:
         self.daily_service = None
         self.learning_service = None
         self.update_service = None
+        self.evaluation_service = None
         self._data_lock = None
         self.graph = Observation(api, graph_port) if graph_port is not None else None
 
@@ -79,6 +82,12 @@ class MomoRuntime:
                     raise RuntimeError("日报服务启动失败")
                 self.boot.registered.append("/DailyService")
                 self.daily_service.start_clock()
+                from services.EvaluationService import EvaluationService
+                self.evaluation_service = EvaluationService(api.server(), self.path.parent / 'evaluation', self.tasks, self.daily_service)
+                if api.add_service(self.evaluation_service, '/EvaluationService') != 0:
+                    raise RuntimeError('日志评估服务启动失败')
+                self.boot.registered.append('/EvaluationService')
+                self.evaluation_service.start()
             if self.profile.study:
                 from services.LearningService import LearningService
                 self.learning_service = LearningService(api.server(), self.path.parent / "learning", self.tasks)
@@ -86,7 +95,7 @@ class MomoRuntime:
                     raise RuntimeError("学习服务启动失败")
                 self.boot.registered.append("/LearningService")
             from services.UpdateService import UpdateService
-            self.update_service = UpdateService(api.server(), self.path.parent/'updates', self.boot.auto_tick)
+            self.update_service = UpdateService(api.server(), self.path.parent/'updates', self.boot.auto_tick and os.environ.get('ORBIT_EVALUATOR_BUILD')!='1')
             if api.add_service(self.update_service, '/UpdateService') != 0:
                 raise RuntimeError('更新服务启动失败')
             self.boot.registered.append('/UpdateService')
@@ -122,6 +131,7 @@ class MomoRuntime:
         for label, service, method in [
             ("更新线程", self.update_service, "stop"),
             ("学习线程", self.learning_service, "stop"),
+            ("评估线程", self.evaluation_service, "stop"),
             ("日报线程", self.daily_service, "stop_clock"),
             ("工作站线程", self.station, "close"),
         ]:
@@ -144,10 +154,10 @@ class MomoRuntime:
             # while the observer and all business services still exist.
             attempt("框架异步池", lambda: api.server().executor.shutdown(wait=True))
         live = []
-        for service in (self.update_service, self.daily_service, self.learning_service, self.station, focus):
+        for service in (self.update_service, self.evaluation_service, self.daily_service, self.learning_service, self.station, focus):
             if service is None:
                 continue
-            for name in ('worker', 'clock', 'thread'):
+            for name in ('worker', 'query_worker', 'report_worker', 'clock', 'thread'):
                 thread = getattr(service, name, None)
                 if isinstance(thread, threading.Thread) and thread.is_alive(): live.append(name)
             workers = getattr(service, 'workers', {})
@@ -181,7 +191,7 @@ class MomoRuntime:
             attempt("Context 清理失败", destroy)
         if self.boot.registered or self.boot.context_keys:
             raise RuntimeError("星序清理待重试："+"; ".join(errors))
-        if apply_update and self.update_service and not errors:
+        if apply_update and self.update_service and not errors and os.environ.get('ORBIT_EVALUATOR_BUILD')!='1':
             attempt("更新尚未切换", self.update_service.activate)
         if self._data_lock:
             self._data_lock.close()

@@ -15,7 +15,7 @@ sys.path[:0]=[str(ROOT),str(ROOT/'tests')]
 os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
 
 NAMES=['test_app_split','test_windows','test_model','test_services','test_issue_scope','test_structure_undo',
-       'test_planning','test_task_move','test_task_detach','test_task_dependencies_ui','test_study_resume','test_display_settings','test_release_entry']
+       'test_planning','test_task_move','test_task_detach','test_task_dependencies_ui','test_study_resume','test_display_settings','test_release_entry','test_evaluation_mesh','test_evaluation_journals','test_evaluation_orbit_bridge','test_evaluation_ui']
 if os.environ.get('ORBIT_NATIVE_TEST_CHILD')!='1':
     failed=False
     cases=[]

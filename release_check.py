@@ -84,11 +84,11 @@ def run_checks(app, window_factory, graph_port=None):
                     if resource == '/api/snapshot':
                         snapshot = json.loads(data)
                         registered = [s for s in snapshot['services'] if s['registered']]
-                        assert len(registered) == 14
-                        assert sum(not s['builtin'] for s in registered) == 9
+                        assert len(registered) == 15
+                        assert sum(not s['builtin'] for s in registered) == 10
                         assert snapshot['version'] == api.version()
                         assert snapshot['edges'] == before['edges']
-                graph_checks = ['graph-9-business-5-builtin', 'graph-http-assets', 'graph-query-does-not-pollute']
+                graph_checks = ['graph-10-business-5-builtin', 'graph-http-assets', 'graph-query-does-not-pollute']
             print(json.dumps(dict(app_version=APP_VERSION, framework_version=api.version(),
                                   checks=['services', 'structure-undo', 'progress-records', 'course-14-chapters',
                                           'native-reader', 'teaching-skill', 'system-git',

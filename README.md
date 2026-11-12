@@ -4,11 +4,14 @@
 
 支持 Linux x86_64、Windows 10/11 x64，可调整窗口与字体。
 
+此为 `evaluator` 开发分支：增加员工名册、设备与 Linear 对应、日志共享、离线副本及进度台账。[使用手册](docs/EVALUATOR_GUIDE.md)。
+
 ## 启动
 
 源码需要 Python 3.11+，先安装 `requirements.txt` 中的依赖。
 
-- Linux：`./run.sh`
+- 评估开发版：Linux `./run-evaluator.sh`，Windows `./run-evaluator.ps1`（默认独立数据空间）。
+- Linux 工作版：`./run.sh`
 - Windows：`./run.ps1`
 
 [下载应用](https://github.com/SevenovaHangzhou/Personal_workstation_qyx/releases/latest)。关闭窗口会驻留托盘，完整退出请使用托盘菜单。

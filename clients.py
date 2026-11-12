@@ -73,6 +73,30 @@ class UpdateClient:
     def cancel(self): return call('/UpdateService/cancel', {})
 
 
+class EvaluationClient:
+    def complete_report_text(self, employee_id, path): return call('/EvaluationService/complete_report_text', dict(employee_id=employee_id, path=path))
+    def snapshot(self): return call('/EvaluationService/snapshot', {})
+    def configure(self, **settings): return call('/EvaluationService/configure', settings)
+    def grant(self, label, full_reports=False): return call('/EvaluationService/grant', {'label':label, 'full_reports':full_reports})
+    def revoke(self, identifier): return call('/EvaluationService/revoke', {'id':identifier})
+    def add_peer(self, payload): return call('/EvaluationService/add_peer', payload)
+    def remove_peer(self, employee_id): return call('/EvaluationService/remove_peer', {'employee_id':employee_id})
+    def sync(self): return call('/EvaluationService/sync', {})
+    def ask(self, **settings): return call('/EvaluationService/ask', settings)
+    def cancel(self): return call('/EvaluationService/cancel', {})
+    def configure_progress(self, **settings): return call('/EvaluationService/configure_progress', settings)
+    def report_folder(self, task_id): return call('/EvaluationService/report_folder', {'task_id':task_id})
+    def reports(self, **settings): return call('/EvaluationService/reports', settings)
+    def clear_reports(self): return call('/EvaluationService/clear_reports', {})
+    def save_issue_update(self, **settings): return call('/EvaluationService/save_issue_update', settings)
+    def issue_history(self, issue_id): return call('/EvaluationService/issue_history', {'issue_id':issue_id})
+    def roster_save_employee(self, **settings): return call('/EvaluationService/roster_save_employee', settings)
+    def roster_bind_device(self, **settings): return call('/EvaluationService/roster_bind_device', settings)
+    def roster_unbind_device(self, **settings): return call('/EvaluationService/roster_unbind_device', settings)
+    def roster_save_account(self, **settings): return call('/EvaluationService/roster_save_account', settings)
+    def roster_remove_account(self, **settings): return call('/EvaluationService/roster_remove_account', settings)
+
+
 class LinearClient:
     def configure(self, api_key, remember=False): return call("/LinearService/configure", LinearCredentials(api_key, remember))
     def forget(self): return call("/LinearService/forget")
