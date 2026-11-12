@@ -17,7 +17,8 @@
 
 - `main`：星序 / ORBIT，工作相关功能。
 - [luma 分支](https://github.com/SevenovaHangzhou/Personal_workstation_qyx/tree/luma)：知序 / LUMA，学习与专注。
+- [evaluator 分支](https://github.com/SevenovaHangzhou/Personal_workstation_qyx/tree/evaluator)：星序评估，收集授权日志和项目进度。
 
-两条分支均支持 Linux 和 Windows。运行 `python scripts/build_product.py` 构建当前分支的产品。
+各产品均支持 Linux 和 Windows。运行 `python scripts/build_product.py` 构建当前分支的产品。
 
 [Linear 使用手册](docs/LINEAR_GUIDE.md) · [同事协作](docs/COLLABORATION.md) · [分支约定](docs/BRANCHES.md) · [数据迁移与恢复](docs/APP_SPLIT.md)
