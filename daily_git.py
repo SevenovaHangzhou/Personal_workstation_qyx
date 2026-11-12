@@ -122,7 +122,7 @@ def daily_snapshot(root, folder, day, task, cancel):
                     'base_commit':head, 'branch':branch, 'fingerprint':fingerprint,
                     'untracked':identities,
                     'restore':'在独立副本切换至 base_commit，补丁非空时先 git apply --index staged.patch，再 git apply working.patch；检查后提取 untracked.tar。当前工作目录和索引从未切换或重置。'}
-        (temp/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2))
+        (temp/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
         target = folder/(day+'-'+task['id'][:8]+'-'+fingerprint[:16])
         if target.exists():
             shutil.rmtree(temp)

@@ -234,7 +234,7 @@ def stage_release(folder, release, event, progress, source=None):
         temporary=Path(temporary)
         for name in (manifest_name,sums_name):
             source.asset(assets[name],temporary/name,event,lambda *_:None)
-        validate_manifest(json.loads((temporary/manifest_name).read_text()),(temporary/sums_name).read_text(),version,package)
+        validate_manifest(json.loads((temporary/manifest_name).read_text(encoding='utf-8')),(temporary/sums_name).read_text(encoding='utf-8'),version,package)
         progress('downloading',0,package['size'])
         archive=temporary/('package.zip' if platform.system()=='Windows' else 'package.tar.gz')
         source.asset(package,archive,event,lambda done,total:progress('downloading',done,total))
@@ -248,7 +248,7 @@ def stage_release(folder, release, event, progress, source=None):
         target=folder/'releases'/version
         target.parent.mkdir(exist_ok=True,mode=0o700)
         if target.exists():
-            if target.is_symlink() or json.loads((target/'ota-install.json').read_text())!=stamp:
+            if target.is_symlink() or json.loads((target/'ota-install.json').read_text(encoding='utf-8'))!=stamp:
                 raise ValueError('同版本更新目录已存在且校验不同，未覆盖已有文件')
             probe(target/(SLUG+'-bin.exe' if platform.system()=='Windows' else SLUG+'-bin'),version,probe_home,event)
         else:os.replace(root,target)

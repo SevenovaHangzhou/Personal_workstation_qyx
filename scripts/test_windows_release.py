@@ -21,7 +21,7 @@ if os.environ.get('ORBIT_NATIVE_TEST_CHILD')!='1':
     cases=[]
     for module in NAMES:
         if module=='test_task_detach':
-            tree=ast.parse((ROOT/'tests'/f'{module}.py').read_text())
+            tree=ast.parse((ROOT/'tests'/f'{module}.py').read_text(encoding='utf-8'))
             cases.extend(f'{module}.{cls.name}.{method.name}' for cls in tree.body if isinstance(cls,ast.ClassDef)
                          for method in cls.body if isinstance(method,ast.FunctionDef) and method.name.startswith('test_'))
         else:cases.append(module)
@@ -33,7 +33,7 @@ if os.environ.get('ORBIT_NATIVE_TEST_CHILD')!='1':
             # Raw output is discarded and is never uploaded or printed.
             child=subprocess.run([sys.executable,str(Path(__file__).resolve())],cwd=ROOT,env=env,
                                  stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-            state=json.loads(path.read_text()) if path.exists() else {}
+            state=json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
             for item in state.get('reports',[]):
                 print('::error title=Windows regression location::'+item,flush=True)
             description=f"module={module} exit={child.returncode} | test={state.get('test','not-started')} | phase={state.get('phase','unknown')}"

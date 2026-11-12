@@ -30,7 +30,7 @@ RUNTIME_PACKAGES = ['PyQt5', 'PyQt5-Qt5', 'PyQt5-sip', 'readerwriterlock',
 
 
 def version():
-    tree = ast.parse((ROOT/'typedefine/TypeDefine.py').read_text())
+    tree = ast.parse((ROOT/'typedefine/TypeDefine.py').read_text(encoding='utf-8'))
     return next(ast.literal_eval(node.value) for node in tree.body if isinstance(node, ast.Assign)
                 and any(isinstance(t, ast.Name) and t.id == 'APP_VERSION' for t in node.targets))
 
@@ -61,7 +61,7 @@ def add_notices(bundle):
         'Python, PyQt5/Qt and their dependencies retain their respective licenses.\n'
         'YomkServerPy and Work Station source, pins and notices are in the source repository.\n'
         'Application source: https://github.com/SevenovaHangzhou/Personal_workstation_qyx/tree/'+subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()+'\n\n'
-        + '\n'.join(f'- {name} {value}' for name, value in versions.items())+'\n')
+        + '\n'.join(f'- {name} {value}' for name, value in versions.items())+'\n',encoding='utf-8')
     return versions
 
 
@@ -81,9 +81,9 @@ def check_desktop_dependencies(plugins, log_path, libraries=None):
         for row in result.stdout.splitlines():
             if '=> not found' in row: missing.add(row.split('=>',1)[0].strip())
         if result.returncode:
-            log_path.write_text('\n'.join(reports))
+            log_path.write_text('\n'.join(reports),encoding='utf-8')
             raise RuntimeError('Qt 桌面依赖检查失败：'+str(plugin))
-    log_path.write_text('\n'.join(reports))
+    log_path.write_text('\n'.join(reports),encoding='utf-8')
     if missing:
         raise RuntimeError('Qt 桌面依赖缺失：'+', '.join(sorted(missing))+
                            '。请补齐系统运行库后重新打包；Ubuntu 常用依赖：libxcb-xinerama0、libxkbcommon-x11-0。')
@@ -121,8 +121,8 @@ def main():
     check_desktop_dependencies(bundle/'_internal/PyQt5/Qt5/plugins',work/'desktop-bundle-dependencies.log',bundle/'_internal')
     shutil.copy2(ROOT/'packaging/launch.sh', bundle/SLUG); (bundle/SLUG).chmod(0o755)
     shutil.copy2(ROOT/'packaging/ota-launch.sh', bundle/'ota-launch.sh')
-    (bundle/'VERSION').write_text(release_version+'\n')
-    (bundle/'PRODUCT').write_text(PROFILE.product+'\n')
+    (bundle/'VERSION').write_text(release_version+'\n',encoding='utf-8')
+    (bundle/'PRODUCT').write_text(PROFILE.product+'\n',encoding='utf-8')
     shutil.copy2(ROOT/'assets'/(PROFILE.icon_slug+'.svg'), bundle/'orbit.svg')
     versions = add_notices(bundle)
     (bundle/'README.txt').write_text(PROFILE.display_name+' '+release_version+'\n运行 ./'+SLUG+'；无需安装 Python。\n'
@@ -140,7 +140,7 @@ def main():
                                 (['--self-test', '--graph', '--graph-port', '0'], 'graph-self-test')]:
             result = subprocess.run([str(bundle/SLUG), *switches], cwd=temporary, env=probe_env,
                                     capture_output=True, text=True, timeout=60)
-            (work/(label+'.log')).write_text(result.stdout+result.stderr)
+            (work/(label+'.log')).write_text(result.stdout+result.stderr,encoding='utf-8')
             result.check_returncode()
             if label == 'version' and release_version not in result.stdout:
                 raise RuntimeError('Frozen version check failed')
@@ -168,7 +168,7 @@ def main():
         'Depends: libc6 (>= 2.35), libglib2.0-0, libgl1, libegl1, libx11-6, libxcb1, libxcb-xinerama0, libxkbcommon-x11-0, libfontconfig1, git, libglib2.0-bin\n'
         'Recommends: fonts-noto-cjk\nHomepage: https://github.com/SevenovaHangzhou/Personal_workstation_qyx\n'
         'Description: ORBIT native desktop task and learning application\n'
-        ' Local tasks, progress records, Codex chat links, guided courses and nightly reports.\n')
+        ' Local tasks, progress records, Codex chat links, guided courses and nightly reports.\n',encoding='utf-8')
     run(['dpkg-deb', '--root-owner-group', '-Zxz', '--build', str(deb_root), str(deb_path)])
     with tempfile.TemporaryDirectory(prefix='orbit-artifact-test-') as temporary:
         extracted = Path(temporary)
@@ -179,16 +179,16 @@ def main():
                              ('debian', extracted/('debian/opt/sevenova-'+SLUG)/SLUG)]:
             result = run([str(binary), '--self-test'], cwd=temporary, env=probe_env,
                          capture_output=True, text=True, timeout=60)
-            (work/(name+'-self-test.log')).write_text(result.stdout+result.stderr)
+            (work/(name+'-self-test.log')).write_text(result.stdout+result.stderr,encoding='utf-8')
             result = run([str(binary), '--self-test', '--graph', '--graph-port', '0'], cwd=temporary,
                          env=probe_env, capture_output=True, text=True, timeout=60)
-            (work/(name+'-graph-self-test.log')).write_text(result.stdout+result.stderr)
+            (work/(name+'-graph-self-test.log')).write_text(result.stdout+result.stderr,encoding='utf-8')
         # Reproduce /usr/bin/orbit without installing into the host system.
         entry = extracted/'command-bin'/SLUG; entry.parent.mkdir()
         entry.symlink_to(extracted/('debian/opt/sevenova-'+SLUG)/SLUG)
         result = run([str(entry), '--self-test'], cwd=temporary, env=probe_env,
                      capture_output=True, text=True, timeout=60)
-        (work/'debian-command-self-test.log').write_text(result.stdout+result.stderr)
+        (work/'debian-command-self-test.log').write_text(result.stdout+result.stderr,encoding='utf-8')
     artifacts = [dict(file=p.name, bytes=p.stat().st_size, sha256=hashlib.sha256(p.read_bytes()).hexdigest()) for p in (tar_path, deb_path)]
     revision = run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
     manifest = dict(app_id=PROFILE.app_id,product=PROFILE.product,version=release_version, platform='linux-x86_64', minimum_glibc='2.35',
@@ -200,8 +200,8 @@ def main():
                                   'Debian-style command symlink --self-test',
                                   'frozen and extracted portable/Debian --self-test --graph (assets + product services)'],
                     user_data_included=False, codex_credentials_included=False)
-    (output/MANIFEST).write_text(json.dumps(manifest, ensure_ascii=False, indent=2)+'\n')
-    (output/SUMS).write_text(''.join(f'{row["sha256"]}  {row["file"]}\n' for row in artifacts))
+    (output/MANIFEST).write_text(json.dumps(manifest, ensure_ascii=False, indent=2)+'\n',encoding='utf-8')
+    (output/SUMS).write_text(''.join(f'{row["sha256"]}  {row["file"]}\n' for row in artifacts),encoding='utf-8')
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
 
 

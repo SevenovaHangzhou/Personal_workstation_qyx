@@ -1,5 +1,6 @@
 """Product-specific, offline probes. Never touch the user's data or login."""
 import json
+import sys
 import tempfile
 from pathlib import Path
 from app_profile import PROFILE
@@ -7,11 +8,33 @@ from framework import api
 from runtime import MomoRuntime
 from model import make_task
 
+def check_persisted_text(path):
+    title='隔离持久化检查 · 中文与符号 🌀'
+    for reopening in (False,True):
+        runtime=MomoRuntime(path,auto_tick=False,profile=PROFILE).start()
+        try:
+            if not reopening:
+                runtime.tasks.clear_samples()
+                task=make_task(title,PROFILE.categories[0]);task_id=task['id'];runtime.tasks.add(task)
+                runtime.updates.configure(False)
+                if runtime.profile.work:
+                    runtime.evaluation_service.state.update(name=title,department='离线验证')
+                    runtime.evaluation_service._write()
+            else:
+                assert runtime.tasks.get(task_id)['title']==title
+                assert runtime.updates.snapshot()['enabled'] is False
+                if runtime.profile.work:assert runtime.evaluation.snapshot()['config']['name']==title
+        finally:runtime.close(apply_update=False)
+
+
 def run_checks(app,window_factory,graph_port=None):
+    if sys.platform=='win32' and getattr(sys,'frozen',False):
+        assert sys.flags.utf8_mode==1,'Windows frozen runtime must enable UTF-8 before Python starts'
     if PROFILE.key=='combined':
         from release_check import run_checks as legacy
         return legacy(app,window_factory,graph_port)
     with tempfile.TemporaryDirectory(prefix=PROFILE.slug+'-self-test-') as directory:
+        check_persisted_text(Path(directory)/'persisted-state/tasks.json')
         runtime=MomoRuntime(Path(directory)/'tasks.json',auto_tick=False,profile=PROFILE,graph_port=graph_port).start()
         window=reader=evaluation_panel=None
         try:
@@ -72,7 +95,7 @@ def run_checks(app,window_factory,graph_port=None):
                         assert registered==names
                         assert observed['edges']==before['edges']
                 graph_checks=['graph-product-inventory','graph-http-assets','graph-query-does-not-pollute']
-            print(json.dumps({'product' :PROFILE.key,'app_id':PROFILE.app_id,'checks':['product-services','task-DAG','native-window','daily-mcp-config-override']+(['course-14-chapters'] if runtime.learning else [])+graph_checks,'network':False,'model_called':False}))
+            print(json.dumps({'product' :PROFILE.key,'app_id':PROFILE.app_id,'checks':['product-services','task-DAG','native-window','daily-mcp-config-override','utf8-state-reopen']+(['course-14-chapters'] if runtime.learning else [])+graph_checks,'network':False,'model_called':False}))
             return 0
         finally:
             if evaluation_panel:evaluation_panel.close();evaluation_panel.deleteLater()
