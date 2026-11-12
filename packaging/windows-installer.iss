@@ -7,6 +7,9 @@
 #ifndef ProductId
 #define ProductId "com.sevenova.Orbit"
 #endif
+#ifndef AppIcon
+#define AppIcon AppSlug
+#endif
 [Setup]
 #if AppSlug == "orbit"
 AppId={{DBF3764D-4031-4C50-9DB4-778E40B267D3}
@@ -25,7 +28,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 OutputDir={#OutputDir}
 OutputBaseFilename={#AppSlug}-{#AppVersion}-windows-x86_64-setup
-SetupIconFile=..\assets\{#AppSlug}.ico
+SetupIconFile=..\assets\{#AppIcon}.ico
 UninstallDisplayIcon={app}\{#AppSlug}.exe
 Compression=lzma2
 SolidCompression=yes

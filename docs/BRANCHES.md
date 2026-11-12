@@ -16,4 +16,4 @@
 
 数据仍分别保存在 `Sevenova/OrbitWork` 与 `Sevenova/Luma`，切换源码分支不迁移或清空应用数据。
 
-评估开发入口默认使用 `Sevenova/OrbitEvaluator`，关闭正式 OTA 自动检查与退出切换。显式指定 `--data-dir` 才使用选定工作空间；不要在该空间已有实例运行时启动。此分支尚无正式发布渠道。
+评估开发入口默认使用 `Sevenova/OrbitEvaluator`，关闭正式 OTA 自动检查与退出切换。显式指定 `--data-dir` 才使用选定工作空间；不要在该空间已有实例运行时启动。0.10.1 起随正式 Release 附带独立管理员安装包，manifest 中记录本分支固定提交；当前手动更新，不进入工作版 OTA。

@@ -1237,8 +1237,9 @@ class Momo(QMainWindow):
 
 
 def main():
-    parser=argparse.ArgumentParser(description=APP_DISPLAY_NAME+" · 原生桌面任务与专注工具")
-    parser.add_argument('--version', action='version', version=APP_DISPLAY_NAME+' '+APP_VERSION)
+    display_name='星序评估 / EVALUATOR' if os.environ.get('ORBIT_EVALUATOR_BUILD')=='1' else APP_DISPLAY_NAME
+    parser=argparse.ArgumentParser(description=display_name+" · 原生桌面任务与专注工具")
+    parser.add_argument('--version', action='version', version=display_name+' '+APP_VERSION)
     parser.add_argument('--self-test', action='store_true', help='使用临时数据离线检查服务、学习资源和系统 Git，不调用模型')
     parser.add_argument("--data-dir",type=Path,help="指定本地数据目录")
     parser.add_argument("--graph",action="store_true",help="启用本机只读 YomkGraph 运行图谱（默认关闭）")
@@ -1253,10 +1254,11 @@ def main():
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling,True); QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps,True)
     app=QApplication(sys.argv[:1])
     # Keep the desktop/window identity compatible; data_paths owns storage naming.
-    app.setApplicationName("Luma" if PROFILE.key=="study" else "Momo"); app.setOrganizationName("Sevenova"); app.setApplicationDisplayName(APP_DISPLAY_NAME)
+    evaluator_build=os.environ.get('ORBIT_EVALUATOR_BUILD')=='1'
+    app.setApplicationName("OrbitEvaluator" if evaluator_build else "Luma" if PROFILE.key=="study" else "Momo"); app.setOrganizationName("Sevenova"); app.setApplicationDisplayName('星序评估 / EVALUATOR' if evaluator_build else APP_DISPLAY_NAME)
     app.setWindowIcon(icon("orbit",PALETTE["primary"],64)); app.setStyle("Fusion"); app.setFont(QFont("Noto Sans CJK SC",10)); app.setStyleSheet(STYLE)
     from PyQt5.QtCore import QSettings
-    display=DisplayController(app,None if args.self_test or args.screenshot else QSettings("Sevenova",PROFILE.wordmark.title())); display.apply(display.saved)
+    display=DisplayController(app,None if args.self_test or args.screenshot else QSettings("Sevenova",'OrbitEvaluator' if evaluator_build else PROFILE.wordmark.title())); display.apply(display.saved)
     if QSystemTrayIcon.isSystemTrayAvailable(): app.setQuitOnLastWindowClosed(False)
     if args.self_test:
         from split_release_check import run_checks

@@ -17,11 +17,11 @@ from datetime import datetime,timezone
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from typedefine.TypeDefine import APP_VERSION
-from app_profile import profile
-PROFILE=profile(os.environ.get("ORBIT_APP_PROFILE","work"))
+from packaging_product import build_product
+PROFILE=build_product()
 SLUG=PROFILE.slug
-MANIFEST="luma-windows-manifest.json" if SLUG=="luma" else "windows-manifest.json"
-SUMS="LUMA-WINDOWS-SHA256SUMS" if SLUG=="luma" else "WINDOWS-SHA256SUMS"
+MANIFEST="evaluator-windows-manifest.json" if SLUG=="orbit-evaluator" else "luma-windows-manifest.json" if SLUG=="luma" else "windows-manifest.json"
+SUMS="EVALUATOR-WINDOWS-SHA256SUMS" if SLUG=="orbit-evaluator" else "LUMA-WINDOWS-SHA256SUMS" if SLUG=="luma" else "WINDOWS-SHA256SUMS"
 os.environ["ORBIT_APP_PROFILE"]=PROFILE.key
 
 
@@ -40,10 +40,10 @@ def main():
                  '--workpath',str(work/'pyinstaller'/spec),str(ROOT/'packaging'/spec)],cwd=ROOT)
     bundle=work/'dist'/SLUG;shutil.copy2(work/'dist'/(SLUG+'.exe'),bundle/(SLUG+'.exe'))
     (bundle/'VERSION').write_text(APP_VERSION+'\n',encoding='utf-8')
-    shutil.copy2(ROOT/'assets'/(SLUG+'.ico'),bundle/(SLUG+'.ico'))
+    shutil.copy2(ROOT/'assets'/(PROFILE.icon_slug+'.ico'),bundle/(SLUG+'.ico'))
     (bundle/'README.txt').write_text(PROFILE.display_name+' '+APP_VERSION+'\n运行 '+SLUG+'.exe。Windows 10/11 x64。无需安装 Python。\n数据：%LOCALAPPDATA%/Sevenova/'+PROFILE.data_name+'\n',encoding='utf-8')
     licenses=bundle/'licenses';licenses.mkdir(exist_ok=True)
-    for name in ('PyQt5','PyQt5-Qt5','PyQt5-sip','readerwriterlock','typing_extensions','starlette','anyio','idna','tzdata','Send2Trash','pyinstaller'):
+    for name in ('PyQt5','PyQt5-Qt5','PyQt5-sip','readerwriterlock','typing_extensions','starlette','anyio','idna','tzdata','Send2Trash','cryptography','cffi','pycparser','psutil','pyinstaller'):
         dist=metadata.distribution(name)
         for relative in dist.files or []:
             if any(word in relative.name.upper() for word in ('LICENSE','COPYING','NOTICE')):
@@ -56,7 +56,7 @@ def main():
         '# Third-party software\n\nLicenses are included in licenses/ and _internal/licenses/.\n'
         'Python, PyQt5/Qt and dependencies retain their respective licenses.\n'
         'YomkServerPy and Work Station source, pins and notices are in the source repository.\n'
-        'Application source: https://github.com/SevenovaHangzhou/Personal_workstation_qyx/tree/v'+APP_VERSION+'\n',encoding='utf-8')
+        'Application source: https://github.com/SevenovaHangzhou/Personal_workstation_qyx/tree/'+subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()+'\n',encoding='utf-8')
     def probe(root,label):
         with tempfile.TemporaryDirectory(prefix='orbit-win-probe-') as temporary:
             env=dict(os.environ,QT_QPA_PLATFORM='offscreen',USERPROFILE=temporary,HOME=temporary,LOCALAPPDATA=temporary+'/local',APPDATA=temporary+'/roaming',PYINSTALLER_RESET_ENVIRONMENT='1',ORBIT_SKIP_OTA='1')
@@ -89,7 +89,7 @@ def main():
         extracted=extract_windows_package(archive,Path(temporary),threading.Event())
         probe(extracted,'portable')
     iscc=shutil.which('ISCC.exe') or str(Path(os.environ.get('ProgramFiles(x86)','C:/Program Files (x86)'))/'Inno Setup 6/ISCC.exe')
-    command([iscc,'/DAppVersion='+APP_VERSION,'/DAppSlug='+SLUG,'/DAppName='+PROFILE.name+' '+PROFILE.wordmark,'/DProductId='+PROFILE.app_id,'/DBundleDir='+str(bundle),'/DOutputDir='+str(output),str(ROOT/'packaging/windows-installer.iss')])
+    command([iscc,'/DAppVersion='+APP_VERSION,'/DAppSlug='+SLUG,'/DAppIcon='+PROFILE.icon_slug,'/DAppName='+PROFILE.name+' '+PROFILE.wordmark,'/DProductId='+PROFILE.app_id,'/DBundleDir='+str(bundle),'/DOutputDir='+str(output),str(ROOT/'packaging/windows-installer.iss')])
     with tempfile.TemporaryDirectory(prefix='orbit-win-install-') as temporary:
         target=Path(temporary)/'app'
         command([str(installer),'/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOICONS','/DIR='+str(target)],timeout=90)
@@ -97,7 +97,7 @@ def main():
         command([str(target/'unins000.exe'),'/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART'],timeout=90)
     artifacts=[dict(file=p.name,bytes=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest()) for p in (archive,installer)]
     revision=command(['git','rev-parse','HEAD'],cwd=ROOT,capture_output=True,text=True).stdout.strip()
-    manifest=dict(app_id=PROFILE.app_id,product=PROFILE.key,version=APP_VERSION,platform='windows-x86_64',minimum_windows='10',source_commit=revision,built_at=datetime.now(timezone.utc).isoformat(),
+    manifest=dict(app_id=PROFILE.app_id,product=PROFILE.product,version=APP_VERSION,platform='windows-x86_64',minimum_windows='10',source_commit=revision,built_at=datetime.now(timezone.utc).isoformat(),
         python=platform.python_version(),runtime_packages={name:metadata.version(name) for name in ('PyQt5','PyQt5-Qt5','PyQt5-sip','readerwriterlock','starlette','tzdata','Send2Trash','pyinstaller')},artifacts=artifacts,verification=['Windows native tests','frozen self-test + graph','portable self-test + graph','installer install/uninstall + self-test + graph','no-console launcher screenshots'],user_data_included=False,codex_credentials_included=False)
     (output/MANIFEST).write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     (output/SUMS).write_text(''.join(f'{row["sha256"]}  {row["file"]}\n' for row in artifacts),encoding='utf-8')

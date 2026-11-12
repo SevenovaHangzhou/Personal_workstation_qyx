@@ -4,6 +4,9 @@ import ssl
 import os
 product=os.environ.get("ORBIT_APP_PROFILE","work")
 slug="luma" if product=="study" else "orbit"
+evaluator=os.environ.get('ORBIT_EVALUATOR_BUILD')=='1'
+if evaluator: slug='orbit-evaluator'
+icon_slug='orbit' if evaluator else slug
 
 root = Path(SPECPATH).parent
 data = [(str(root/'assets'), 'assets'),
@@ -18,7 +21,7 @@ if tls_policy.is_file():
 for name, source in [('YomkServerPy', root/'vendor/yomkserverpy/LICENSE.txt'),
                      ('Work-Station', root/'vendor/work_station/LICENSE')]:
     data.append((str(source), 'licenses/'+name))
-a = Analysis([str(root/(slug+'.py'))],
+a = Analysis([str(root/('evaluator.py' if evaluator else slug+'.py'))],
              pathex=[str(root), str(root/'runtime/python'), str(root/'vendor/work_station')],
              binaries=[], datas=data,
              hiddenimports=['YomkApi', 'YomkServerPy', 'YomkServerPyVersion', 'yomk_graph', 'yomk_graph.python', 'yomk_graph.collector', 'yomk_graph.server'],
@@ -26,5 +29,5 @@ a = Analysis([str(root/(slug+'.py'))],
              noarchive=False)
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name=slug+'-bin', debug=False,
-          bootloader_ignore_signals=False, strip=False, upx=False, console=True, icon=str(root/('assets/'+slug+'.ico')) if (root/('assets/'+slug+'.ico')).exists() else None)
+          bootloader_ignore_signals=False, strip=False, upx=False, console=True, icon=str(root/('assets/'+icon_slug+'.ico')) if (root/('assets/'+icon_slug+'.ico')).exists() else None)
 coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name=slug)

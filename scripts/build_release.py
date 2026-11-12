@@ -19,13 +19,14 @@ from datetime import datetime, timezone
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
-from app_profile import profile
-PROFILE=profile(os.environ.get("ORBIT_APP_PROFILE","work"))
+from packaging_product import build_product
+PROFILE=build_product()
 SLUG=PROFILE.slug
-MANIFEST="luma-manifest.json" if SLUG=="luma" else "manifest.json"
-SUMS="LUMA-SHA256SUMS" if SLUG=="luma" else "SHA256SUMS"
+MANIFEST="evaluator-manifest.json" if SLUG=="orbit-evaluator" else "luma-manifest.json" if SLUG=="luma" else "manifest.json"
+SUMS="EVALUATOR-SHA256SUMS" if SLUG=="orbit-evaluator" else "LUMA-SHA256SUMS" if SLUG=="luma" else "SHA256SUMS"
 RUNTIME_PACKAGES = ['PyQt5', 'PyQt5-Qt5', 'PyQt5-sip', 'readerwriterlock',
-                    'typing_extensions', 'starlette', 'anyio', 'idna']
+                    'typing_extensions', 'starlette', 'anyio', 'idna',
+                    'cryptography', 'cffi', 'pycparser', 'psutil']
 
 
 def version():
@@ -59,7 +60,7 @@ def add_notices(bundle):
         '# Third-party software\n\nLicenses are included in licenses/ and _internal/licenses/.\n'
         'Python, PyQt5/Qt and their dependencies retain their respective licenses.\n'
         'YomkServerPy and Work Station source, pins and notices are in the source repository.\n'
-        'Application source: https://github.com/SevenovaHangzhou/Personal_workstation_qyx/tree/v'+version()+'\n\n'
+        'Application source: https://github.com/SevenovaHangzhou/Personal_workstation_qyx/tree/'+subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()+'\n\n'
         + '\n'.join(f'- {name} {value}' for name, value in versions.items())+'\n')
     return versions
 
@@ -121,8 +122,8 @@ def main():
     shutil.copy2(ROOT/'packaging/launch.sh', bundle/SLUG); (bundle/SLUG).chmod(0o755)
     shutil.copy2(ROOT/'packaging/ota-launch.sh', bundle/'ota-launch.sh')
     (bundle/'VERSION').write_text(release_version+'\n')
-    (bundle/'PRODUCT').write_text(PROFILE.key+'\n')
-    shutil.copy2(ROOT/'assets'/(SLUG+'.svg'), bundle/'orbit.svg')
+    (bundle/'PRODUCT').write_text(PROFILE.product+'\n')
+    shutil.copy2(ROOT/'assets'/(PROFILE.icon_slug+'.svg'), bundle/'orbit.svg')
     versions = add_notices(bundle)
     (bundle/'README.txt').write_text(PROFILE.display_name+' '+release_version+'\n运行 ./'+SLUG+'；无需安装 Python。\n'
         +'数据：~/.local/share/Sevenova/'+PROFILE.data_name+'\n关闭窗口驻留托盘；从托盘完整退出后更新生效。\n',encoding='utf-8')
@@ -159,7 +160,7 @@ def main():
     desktop = deb_root/'usr/share/applications'; desktop.mkdir(parents=True)
     shutil.copy2(ROOT/'packaging'/(PROFILE.app_id+'.desktop'), desktop)
     icons = deb_root/'usr/share/icons/hicolor/scalable/apps'; icons.mkdir(parents=True)
-    shutil.copy2(ROOT/'assets'/(SLUG+'.svg'), icons/(PROFILE.app_id+'.svg'))
+    shutil.copy2(ROOT/'assets'/(PROFILE.icon_slug+'.svg'), icons/(PROFILE.app_id+'.svg'))
     size = sum(p.stat().st_size for p in bundle.rglob('*') if p.is_file())//1024
     (deb_root/'DEBIAN/control').write_text(
         f'Package: sevenova-{SLUG}\nVersion: {release_version}\nArchitecture: amd64\nMaintainer: Sevenova\n'
@@ -190,7 +191,7 @@ def main():
         (work/'debian-command-self-test.log').write_text(result.stdout+result.stderr)
     artifacts = [dict(file=p.name, bytes=p.stat().st_size, sha256=hashlib.sha256(p.read_bytes()).hexdigest()) for p in (tar_path, deb_path)]
     revision = run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
-    manifest = dict(app_id=PROFILE.app_id,product=PROFILE.key,version=release_version, platform='linux-x86_64', minimum_glibc='2.35',
+    manifest = dict(app_id=PROFILE.app_id,product=PROFILE.product,version=release_version, platform='linux-x86_64', minimum_glibc='2.35',
                     source_commit=revision, built_at=datetime.now(timezone.utc).isoformat(),
                     python=platform.python_version(), pyinstaller=metadata.version('pyinstaller'),
                     runtime_packages=versions, artifacts=artifacts,

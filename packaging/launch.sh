@@ -2,8 +2,13 @@
 set -euo pipefail
 ORBIT_APP_DIR="$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")"
 ORBIT_PRODUCT="$(cat -- "$ORBIT_APP_DIR/PRODUCT")"
-export ORBIT_APP_PROFILE="$ORBIT_PRODUCT"
 ORBIT_SLUG=orbit
+if [[ "$ORBIT_PRODUCT" == evaluator ]]; then
+    ORBIT_PRODUCT=work
+    ORBIT_SLUG=orbit-evaluator
+    export ORBIT_EVALUATOR_BUILD=1 ORBIT_SKIP_OTA=1
+fi
+export ORBIT_APP_PROFILE="$ORBIT_PRODUCT"
 if [[ "$ORBIT_PRODUCT" == study ]]; then ORBIT_SLUG=luma; fi
 source "$ORBIT_APP_DIR/ota-launch.sh"
 orbit_ota_launch "$(cat -- "$ORBIT_APP_DIR/VERSION")" "$@"

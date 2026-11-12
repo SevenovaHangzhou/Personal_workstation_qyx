@@ -7,7 +7,9 @@ import subprocess
 import sys
 import tempfile
 from app_profile import PROFILE
-SLUG=PROFILE.slug
+EVALUATOR=os.environ.get('ORBIT_EVALUATOR_BUILD')=='1'
+SLUG='orbit-evaluator' if EVALUATOR else PROFILE.slug
+DATA_NAME='OrbitEvaluator' if EVALUATOR else PROFILE.data_name
 
 VERSION_RE=re.compile(r'(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z')
 
@@ -19,7 +21,7 @@ def main():
     base=Path(sys.executable).resolve().parent
     current=(base/'VERSION').read_text().strip()
     home=Path(os.environ.get('LOCALAPPDATA',str(Path.home()/'AppData/Local')))
-    data=home/'Sevenova'/PROFILE.data_name
+    data=home/'Sevenova'/DATA_NAME
     args=sys.argv[1:]
     for i,arg in enumerate(args):
         if arg=='--data-dir' and i+1<len(args):data=Path(args[i+1]).absolute()
@@ -35,7 +37,7 @@ def main():
                     stamp=json.loads((path/'ota-install.json').read_text())
                     if stamp.get('app_id')==PROFILE.app_id and stamp['version']==candidate and (path/(SLUG+'-bin.exe')).is_file():target=path
         except (OSError,ValueError,KeyError):pass
-    logs=home/'Sevenova'/PROFILE.data_name/'logs';logs.mkdir(parents=True,exist_ok=True)
+    logs=home/'Sevenova'/DATA_NAME/'logs';logs.mkdir(parents=True,exist_ok=True)
     env=dict(os.environ);env['ORBIT_SKIP_OTA']='1';marker=None
     if target!=base:
         updates.mkdir(parents=True,exist_ok=True)

@@ -2,7 +2,11 @@
 
 这是 `evaluator` 分支的原生桌面功能，入口是侧栏「日志评估」。不做验收或员工评分，新的评估流程不写回 Linear。
 
-## 启动
+## 安装与启动
+
+Release 中选择 `orbit-evaluator` 安装包；Linux 提供 `.deb` / `.tar.gz`，Windows 10/11 x64 提供 `setup.exe` / `.zip`。安装后从应用菜单「星序评估 EVALUATOR」启动；便携包运行 `orbit-evaluator` 或 `orbit-evaluator.exe`。无需另装 Python。安装路径、桌面标识、设置及数据目录均与星序工作版分开；管理员版当前手动更新。
+
+以下为源码启动方式：
 
 需要 Python 3.11+、项目运行时和 `requirements.txt` 依赖（新增 `cryptography`）。
 

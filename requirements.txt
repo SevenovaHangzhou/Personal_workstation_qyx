@@ -2,7 +2,9 @@ PyQt5>=5.15,<6
 readerwriterlock==1.0.9
 typing_extensions>=4,<5
 starlette==0.52.1
-cryptography>=43
 
 tzdata>=2025.1; sys_platform == "win32"
 Send2Trash>=1.8,<3; sys_platform == "win32"
+
+cryptography>=46,<51
+psutil>=7,<8

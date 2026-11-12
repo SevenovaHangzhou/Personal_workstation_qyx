@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=ORBIT Evaluator
+Name[zh_CN]=星序评估 EVALUATOR
+Comment=Authorized employee journals and progress
+Comment[zh_CN]=经授权的员工日志与项目进展
+Exec=/opt/sevenova-orbit-evaluator/orbit-evaluator
+Icon=com.sevenova.OrbitEvaluator
+Terminal=false
+Categories=Office;
+StartupWMClass=OrbitEvaluator

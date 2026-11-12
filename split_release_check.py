@@ -13,7 +13,7 @@ def run_checks(app,window_factory,graph_port=None):
         return legacy(app,window_factory,graph_port)
     with tempfile.TemporaryDirectory(prefix=PROFILE.slug+'-self-test-') as directory:
         runtime=MomoRuntime(Path(directory)/'tasks.json',auto_tick=False,profile=PROFILE,graph_port=graph_port).start()
-        window=reader=None
+        window=reader=evaluation_panel=None
         try:
             runtime.tasks.clear_samples()
             task=make_task('隔离离线检查',PROFILE.categories[0]); runtime.tasks.add(task)
@@ -27,6 +27,16 @@ def run_checks(app,window_factory,graph_port=None):
                 assert {'/LinearService','/CodexService','/DailyService','/GitService','/EvaluationService'}<=names
                 assert runtime.evaluation.snapshot()['config']['sharing'] is False
                 assert window.focus_card.isHidden() and window.detail_focus.isHidden()
+                import os
+                if os.environ.get('ORBIT_EVALUATOR_BUILD')=='1':
+                    from evaluation_ui import EvaluationDialog
+                    evaluation_panel=EvaluationDialog(window)
+                    assert evaluation_panel.tabs.count()==7
+                    from evaluation.mesh import ShareServer
+                    import uuid
+                    wire=ShareServer(Path(directory)/'wire-probe',str(uuid.uuid4()),'隔离自检',lambda:[])
+                    wire._certificate()
+                    assert not runtime.update_service.auto_tick
             else:
                 assert runtime.daily is None and runtime.station is None and runtime.codex is None
                 assert not names.intersection({'/LinearService','/CodexService','/DailyService','/GitService','/EvaluationService'})
@@ -65,6 +75,7 @@ def run_checks(app,window_factory,graph_port=None):
             print(json.dumps({'product' :PROFILE.key,'app_id':PROFILE.app_id,'checks':['product-services','task-DAG','native-window','daily-mcp-config-override']+(['course-14-chapters'] if runtime.learning else [])+graph_checks,'network':False,'model_called':False}))
             return 0
         finally:
+            if evaluation_panel:evaluation_panel.close();evaluation_panel.deleteLater()
             if reader: reader.close()
             if window:
                 window.exiting=True; window.close(); window.drain_ui_workers(); window.deleteLater()
