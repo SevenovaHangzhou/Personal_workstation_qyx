@@ -1,4 +1,5 @@
 """Dependency guidance edits only user-selected links and keeps movement explicit."""
+import gc
 import tempfile
 import unittest
 from pathlib import Path
@@ -25,7 +26,7 @@ class DependencyUiTests(unittest.TestCase):
 
     def tearDown(self):
         self.window.exiting=True; self.window.close(); self.window.deleteLater(); APP.processEvents()
-        self.runtime.close(); self.temp.cleanup()
+        self.runtime.close(); gc.collect(); self.temp.cleanup()
 
     def select(self,dialog,task_id):
         for i in range(dialog.rows.count()):

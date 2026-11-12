@@ -37,7 +37,7 @@ def atomic_text(path, text):
     path = Path(path); path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     fd, temporary = tempfile.mkstemp(prefix='.ota-', dir=path.parent)
     try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+        with os.fdopen(fd, 'w', encoding='utf-8', newline='\n') as stream:
             stream.write(text); stream.flush(); os.fsync(stream.fileno())
         os.replace(temporary, path)
     finally:
