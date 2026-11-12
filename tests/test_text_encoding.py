@@ -23,18 +23,25 @@ from split_migration import MARKER, split_data, write_json
 def gbk_default_files():
     """Emulate Chinese Windows even when the test runner enables UTF-8 mode.
 
-    Patch the actual file-opening boundary. Explicit UTF-8 reads/writes remain
-    unchanged; omitted or ``locale`` text encodings use strict GBK. Binary file
-    access is untouched, including SQLite, certificates, and OTA archives.
+    Patch file opening and pathlib's default encoding resolution. UTF-8 mode
+    resolves omitted read_text/write_text encodings before Path.open is called,
+    so both boundaries must emulate the locale. Explicit UTF-8 and binary file
+    access remain unchanged, including SQLite, certificates, and OTA archives.
     """
     original = Path.open
+    original_text_encoding = io.text_encoding
 
     def open_file(path, mode='r', buffering=-1, encoding=None, errors=None, newline=None):
         if 'b' not in mode and encoding in (None, 'locale'):
             encoding = 'gbk'
         return original(path, mode, buffering, encoding, errors, newline)
 
-    with patch.object(Path, 'open', open_file):
+    def text_encoding(encoding, stacklevel=2):
+        if encoding in (None, 'locale'):
+            return 'gbk'
+        return original_text_encoding(encoding, stacklevel)
+
+    with patch.object(Path, 'open', open_file), patch.object(io, 'text_encoding', text_encoding):
         yield
 
 
@@ -70,6 +77,9 @@ class TextEncodingTests(unittest.TestCase):
                     stream.read()
             self.assertEqual(path.read_text(encoding='utf-8'), text)
             self.assertEqual(path.read_bytes(), text.encode('utf-8'))
+            # Omitted writes must exercise the same locale as omitted reads.
+            with self.assertRaises(UnicodeEncodeError):
+                (self.root/'default-write.txt').write_text(text)
 
     def test_work_runtime_reopens_chinese_collaboration_and_identity_markers(self):
         runtime = self.start_runtime('work')
