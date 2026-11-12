@@ -43,7 +43,7 @@ def default_data_directory(data_home):
             if not target.is_dir() or target.is_symlink(): raise RuntimeError('星序数据目录无效，未修改已有文件')
             if legacy.exists(): raise RuntimeError('发现两个独立数据空间，未自动合并；请使用 --data-dir 选择')
             marker=target/MIGRATION_MARKER
-            if marker.is_file() and json.loads(marker.read_text()).get('legacy_path')==str(legacy):
+            if marker.is_file() and json.loads(marker.read_text(encoding='utf-8')).get('legacy_path')==str(legacy):
                 legacy.parent.mkdir(parents=True,exist_ok=True)
                 legacy.symlink_to(target,target_is_directory=True)
             return target

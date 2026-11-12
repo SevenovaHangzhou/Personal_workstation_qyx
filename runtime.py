@@ -62,10 +62,10 @@ class MomoRuntime:
             if self.profile.key!='combined':
                 import json
                 marker=self.path.parent/'.application.json'
-                if marker.exists() and json.loads(marker.read_text()).get('app_id')!=self.profile.app_id:
+                if marker.exists() and json.loads(marker.read_text(encoding='utf-8')).get('app_id')!=self.profile.app_id:
                     raise ValueError('该数据空间属于另一个应用，未修改数据')
                 split_marker=self.path.parent/'.product-split.json'
-                if split_marker.exists() and json.loads(split_marker.read_text()).get('product')!=self.profile.key:
+                if split_marker.exists() and json.loads(split_marker.read_text(encoding='utf-8')).get('product')!=self.profile.key:
                     raise ValueError('该数据空间属于另一个应用，未修改数据')
             if self.graph: self.graph.attach()
             with caller("@Boot"):

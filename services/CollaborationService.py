@@ -34,7 +34,7 @@ class CollaborationService(MomoService):
                         report_sharing=dict(enabled=False,admin_id=None,collect=False),report_inbox={},report_status={},report_source_status='',report_sync={},
                         knowledge_jobs={},workspaces={},published={},replicas={},cursors={},received={},sync=dict(status='idle',message='',done=0,total=0))
         if self.path.exists():
-            saved=json.loads(self.path.read_text());require(saved.get('format')==self.state['format'],'局域网协作记录格式无效')
+            saved=json.loads(self.path.read_text(encoding='utf-8'));require(saved.get('format')==self.state['format'],'局域网协作记录格式无效')
             self.state.update(saved)
             for action in self.state['actions']:
                 if action['status']=='sending':action['status']='queued'

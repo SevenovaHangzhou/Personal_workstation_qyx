@@ -25,6 +25,6 @@ a = Analysis([str(root/(slug+'.py'))],
              hookspath=[], runtime_hooks=[], excludes=['tkinter', 'PyQt6', 'PySide2', 'PySide6'],
              noarchive=False)
 pyz = PYZ(a.pure)
-exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name=slug+'-bin', debug=False,
+exe = EXE(pyz, a.scripts, [('X utf8', None, 'OPTION')], exclude_binaries=True, name=slug+'-bin', debug=False,
           bootloader_ignore_signals=False, strip=False, upx=False, console=True, icon=str(root/('assets/'+slug+'.ico')) if (root/('assets/'+slug+'.ico')).exists() else None)
 coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name=slug)

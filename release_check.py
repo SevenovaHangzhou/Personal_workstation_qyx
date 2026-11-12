@@ -50,11 +50,11 @@ def run_checks(app, window_factory, graph_port=None):
                 assert default_data_directory(Path(temporary)/'data')==Path(temporary)/'data/Sevenova/Orbit'
             else:
                 legacy=Path(temporary)/'data/MomoLocal/Momo';legacy.mkdir(parents=True)
-                (legacy/'probe.txt').write_text('preserved')
+                (legacy/'probe.txt').write_text('preserved',encoding='utf-8')
                 identity=CredentialStore(legacy).service
                 migrated=default_data_directory(Path(temporary)/'data')
                 assert migrated==Path(temporary)/'data/Sevenova/Orbit'
-                assert legacy.is_symlink() and (legacy/'probe.txt').read_text()=='preserved'
+                assert legacy.is_symlink() and (legacy/'probe.txt').read_text(encoding='utf-8')=='preserved'
                 assert CredentialStore(migrated).service==identity
             import tomllib
             from daily_summary import disabled_mcp_arguments

@@ -14,14 +14,14 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'tests')]
 os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
 
-NAMES=['test_app_split','test_windows','test_model','test_services','test_issue_scope','test_structure_undo',
+NAMES=['test_text_encoding','test_app_split','test_windows','test_model','test_services','test_issue_scope','test_structure_undo',
        'test_planning','test_task_move','test_task_detach','test_task_dependencies_ui','test_study_resume','test_display_settings','test_release_entry','test_mesh_collaboration','test_collaboration_ui','test_report_sharing','test_report_sharing_ui','test_journal_sharing_ui']
 if os.environ.get('ORBIT_NATIVE_TEST_CHILD')!='1':
     failed=False
     cases=[]
     for module in NAMES:
         if module=='test_task_detach':
-            tree=ast.parse((ROOT/'tests'/f'{module}.py').read_text())
+            tree=ast.parse((ROOT/'tests'/f'{module}.py').read_text(encoding='utf-8'))
             cases.extend(f'{module}.{cls.name}.{method.name}' for cls in tree.body if isinstance(cls,ast.ClassDef)
                          for method in cls.body if isinstance(method,ast.FunctionDef) and method.name.startswith('test_'))
         else:cases.append(module)
@@ -33,7 +33,7 @@ if os.environ.get('ORBIT_NATIVE_TEST_CHILD')!='1':
             # Raw output is discarded and is never uploaded or printed.
             child=subprocess.run([sys.executable,str(Path(__file__).resolve())],cwd=ROOT,env=env,
                                  stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-            state=json.loads(path.read_text()) if path.exists() else {}
+            state=json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
             for item in state.get('reports',[]):
                 print('::error title=Windows regression location::'+item,flush=True)
             description=f"module={module} exit={child.returncode} | test={state.get('test','not-started')} | phase={state.get('phase','unknown')}"

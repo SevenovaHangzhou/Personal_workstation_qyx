@@ -63,14 +63,14 @@ def main():
     if any(ord(c) < 32 or c == '\\' for c in str(root)):
         raise SystemExit('Service root contains unsupported control characters')
     source = Path(__file__).resolve().parent
-    manifest = json.loads((source / 'manifest.json').read_text())
+    manifest = json.loads((source / 'manifest.json').read_text(encoding='utf-8'))
     for name, digest in manifest['files'].items():
         path = source / name
         if not path.resolve().is_relative_to(source) or path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             raise SystemExit('Package checksum mismatch: ' + name)
     units = Path.home() / '.config/systemd/user'
     target = units / 'orbit-knowledge.service'
-    if target.exists() and 'ORBIT LAN project knowledge service' not in target.read_text():
+    if target.exists() and 'ORBIT LAN project knowledge service' not in target.read_text(encoding='utf-8'):
         raise SystemExit('Refusing to replace an unrelated user unit')
     os.umask(0o077)
     root.mkdir(parents=True, exist_ok=True)
@@ -83,7 +83,7 @@ def main():
 def install(args, root, source, manifest, units, target):
     config = root / 'settings.json'
     settings = dict(host=args.host, port=args.port)
-    if config.exists() and json.loads(config.read_text()) != settings:
+    if config.exists() and json.loads(config.read_text(encoding='utf-8')) != settings:
         raise SystemExit('Existing service settings differ; review settings before upgrading')
     release = root / 'releases' / manifest['id']
     release.parent.mkdir(exist_ok=True)
@@ -115,7 +115,7 @@ def install(args, root, source, manifest, units, target):
         key.chmod(0o600)
     if not cert.is_file() or not key.is_file():
         raise SystemExit('Incomplete TLS certificate pair; existing files were preserved')
-    fingerprint = hashlib.sha256(ssl.PEM_cert_to_DER_cert(cert.read_text())).hexdigest()
+    fingerprint = hashlib.sha256(ssl.PEM_cert_to_DER_cert(cert.read_text(encoding='utf-8'))).hexdigest()
 
     def quote(path):
         return '"' + str(path).replace('\\', '\\\\').replace('"', '\\"').replace('%', '%%') + '"'
@@ -140,7 +140,7 @@ WantedBy=default.target
     previous = (root / 'current').readlink() if (root / 'current').is_symlink() else None
     if (root / 'current').exists() and previous is None:
         raise SystemExit('Refusing to replace a non-symlink current directory')
-    old_unit = target.read_text() if target.exists() else None
+    old_unit = target.read_text(encoding='utf-8') if target.exists() else None
     if old_unit:
         replace_text(root / 'previous-service.unit', old_unit)
     units.mkdir(parents=True, exist_ok=True)

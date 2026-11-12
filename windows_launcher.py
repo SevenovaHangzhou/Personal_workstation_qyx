@@ -17,7 +17,7 @@ def version(value):
 
 def main():
     base=Path(sys.executable).resolve().parent
-    current=(base/'VERSION').read_text().strip()
+    current=(base/'VERSION').read_text(encoding='utf-8').strip()
     home=Path(os.environ.get('LOCALAPPDATA',str(Path.home()/'AppData/Local')))
     data=home/'Sevenova'/PROFILE.data_name
     args=sys.argv[1:]
@@ -29,10 +29,10 @@ def main():
         try:
             pointer=updates/'current-version'
             if not pointer.is_symlink():
-                candidate=pointer.read_text().strip();version(candidate)
+                candidate=pointer.read_text(encoding='utf-8').strip();version(candidate)
                 path=updates/'releases'/candidate
                 if version(candidate)>version(current) and not path.is_symlink() and path.is_dir():
-                    stamp=json.loads((path/'ota-install.json').read_text())
+                    stamp=json.loads((path/'ota-install.json').read_text(encoding='utf-8'))
                     if stamp.get('app_id')==PROFILE.app_id and stamp['version']==candidate and (path/(SLUG+'-bin.exe')).is_file():target=path
         except (OSError,ValueError,KeyError):pass
     logs=home/'Sevenova'/PROFILE.data_name/'logs';logs.mkdir(parents=True,exist_ok=True)
@@ -45,8 +45,8 @@ def main():
         with (logs/'startup.log').open('ab') as stream:
             result=subprocess.run([str(target/(SLUG+'-bin.exe')),*args],env=env,stdout=stream,stderr=stream,
                                   creationflags=subprocess.CREATE_NO_WINDOW)
-            if target!=base and result.returncode not in (0,75) and not marker.read_text().strip():
-                (updates/'failed-version').write_text(candidate+'\n')
+            if target!=base and result.returncode not in (0,75) and not marker.read_text(encoding='utf-8').strip():
+                (updates/'failed-version').write_text(candidate+'\n',encoding='utf-8')
                 try:(updates/'current-version').unlink()
                 except FileNotFoundError:pass
                 result=subprocess.run([str(base/(SLUG+'-bin.exe')),*args],env=env,stdout=stream,stderr=stream,

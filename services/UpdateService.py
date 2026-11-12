@@ -23,20 +23,20 @@ class UpdateService(MomoService):
                     'last_checked':None,'message':'退出后切换更新，下次启动生效','done':0,'total':0}
         if self.path.exists():
             try:
-                saved=json.loads(self.path.read_text())
+                saved=json.loads(self.path.read_text(encoding='utf-8'))
                 if type(saved.get('enabled')) is bool:self.state['enabled']=saved['enabled']
                 if isinstance(saved.get('last_checked'),str):self.state['last_checked']=saved['last_checked']
                 ready=saved.get('ready')
                 if isinstance(ready,dict) and version_tuple(ready.get('version'))>version_tuple(current):
                     stamp=self.folder/'releases'/ready['version']/'ota-install.json'
-                    if not stamp.is_symlink() and json.loads(stamp.read_text())==ready:
+                    if not stamp.is_symlink() and json.loads(stamp.read_text(encoding='utf-8'))==ready:
                         self.state.update(ready=ready,available=ready['version'],status='ready',message='更新已准备，完整退出后切换，下次启动生效')
             except (OSError,ValueError,TypeError,AttributeError):
                 self.state['message']='更新缓存暂不可读，可重新检查；原安装不受影响'
         failed=self.folder/'failed-version'
         if failed.is_file():
             try:
-                if self.state['ready'] and failed.read_text().strip()==self.state['ready']['version']:
+                if self.state['ready'] and failed.read_text(encoding='utf-8').strip()==self.state['ready']['version']:
                     self.state.update(ready=None,status='error')
                 self.state['message']='上次更新启动失败，已回退原安装；可重新检查更新'
             except OSError:pass
@@ -100,7 +100,7 @@ class UpdateService(MomoService):
             require(release.get('draft') is False and release.get('prerelease') is False,'忽略草稿与预发布版本')
             latest=version_tuple(release.get('tag_name')); version=release['tag_name'].removeprefix('v')
             failed=self.folder/'failed-version'
-            if self.automatic and failed.is_file() and failed.read_text().strip()==version:
+            if self.automatic and failed.is_file() and failed.read_text(encoding='utf-8').strip()==version:
                 raise ValueError('此版本上次启动失败，已停止自动重试；可手动检查更新')
             with self.lock:
                 self.state['last_checked']=datetime.now(timezone.utc).isoformat()
@@ -149,14 +149,14 @@ class UpdateService(MomoService):
             ready=self.state.get('ready')
             if not ready or version_tuple(ready['version'])<=version_tuple(self.current):return
             target=self.folder/'releases'/ready['version']
-            require(not target.is_symlink() and json.loads((target/'ota-install.json').read_text())==ready,'更新目录已变化，未切换版本')
+            require(not target.is_symlink() and json.loads((target/'ota-install.json').read_text(encoding='utf-8'))==ready,'更新目录已变化，未切换版本')
             atomic_text(self.folder/'previous-version',self.current+'\n')
             atomic_text(self.folder/'current-version',ready['version']+'\n')
 
     def mark_started(self):
         failed=self.folder/'failed-version'
         try:
-            if failed.is_file() and failed.read_text().strip()==self.current:failed.unlink()
+            if failed.is_file() and failed.read_text(encoding='utf-8').strip()==self.current:failed.unlink()
         except OSError:pass
         marker=os.environ.get('ORBIT_OTA_HEALTH_FILE')
         if not marker:return

@@ -100,7 +100,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def serve(args):
-    folder=Path(args.folder);join=(folder/'join-code').read_text().strip()
+    folder=Path(args.folder);join=(folder/'join-code').read_text(encoding='utf-8').strip()
     store=KnowledgeStore(folder,join);api.init(2)
     service=KnowledgeService(api.server(),store)
     if api.add_service(service,'/KnowledgeService')!=0:raise RuntimeError('知识库 Yomk 服务启动失败')

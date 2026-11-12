@@ -322,7 +322,7 @@ class CollaborationDialog(QDialog):
         try:
             path=safe_file(replica['root'],name)
             if path.stat().st_size>512000:self.peer_note_view.setPlainText('资料超过预览大小，请从本地副本中查看。');return
-            self.peer_note_view.setPlainText(path.read_text())
+            self.peer_note_view.setPlainText(path.read_text(encoding='utf-8'))
         except UnicodeError:self.peer_note_view.setPlainText('此为二进制资料，请从本地副本中查看。')
         except (OSError,ValueError) as exc:self.peer_note_view.setPlainText(str(exc))
 
@@ -386,13 +386,13 @@ class CollaborationDialog(QDialog):
         for name in preview['diff']['added']+preview['diff']['changed']:
             path=safe_file(preview['root'],name)
             if path.stat().st_size>128000:lines+=['','文件较大，请在资料目录核对：'+name];continue
-            try:new=path.read_text()
+            try:new=path.read_text(encoding='utf-8')
             except UnicodeError:lines+=['','二进制资料，请在资料目录核对：'+name];continue
             old=''
             if workspace.get('version'):
                 previous=Replicas(self.client_folder()).folder(preview['project_id'],self.snapshot['device_id'],workspace['version'])/name
                 if previous.is_file() and previous.stat().st_size<=128000:
-                    try:old=previous.read_text()
+                    try:old=previous.read_text(encoding='utf-8')
                     except UnicodeError:pass
             lines+=['','内容变更：'+name]+list(difflib.unified_diff(old.splitlines(),new.splitlines(),fromfile='已共享',tofile='待共享',lineterm=''))
         if self.preview('预览知识库共享','\n'.join(lines)):

@@ -134,7 +134,7 @@ def prepare_products(source,backup,stage,transaction):
                         if text not in allowed_summaries: db.execute('DELETE FROM summaries WHERE digest=?',(digest,))
             # Keep the original keyring identity, independent of the work folder.
             old=backup/'.orbit-data-migration.json'
-            identity=json.loads(old.read_text()).get('credential_path',str(source)) if old.exists() else str(source)
+            identity=json.loads(old.read_text(encoding='utf-8')).get('credential_path',str(source)) if old.exists() else str(source)
             write_json(folder/'.orbit-data-migration.json',{'credential_path':identity,'legacy_path':str(source)})
         else:
             folder.mkdir(mode=0o700)
@@ -143,7 +143,7 @@ def prepare_products(source,backup,stage,transaction):
                 rebase_json(folder/'learning',source,stage.parent/app.data_name)
                 legacy_marker=backup/'.orbit-data-migration.json'
                 if legacy_marker.exists():
-                    legacy=json.loads(legacy_marker.read_text()).get('legacy_path')
+                    legacy=json.loads(legacy_marker.read_text(encoding='utf-8')).get('legacy_path')
                     if legacy and Path(legacy).is_absolute(): rebase_json(folder/'learning',Path(legacy),stage.parent/app.data_name)
             # Old task chat references stay as history, without a chat service/UI.
         write_json(folder/'tasks.json',data)
@@ -158,7 +158,7 @@ def split_data(source,home):
     with (home/'.orbit-luma-split.lock').open('a+') as guard:
         lock_file(guard,blocking=True)
         if journal.exists():
-            record=json.loads(journal.read_text())
+            record=json.loads(journal.read_text(encoding='utf-8'))
             if record.get('source')!=str(source): raise ValueError('迁移来源与已有记录不一致，未合并数据')
             return finish_split(home,record,journal)
         targets=[home/PROFILES[k].data_name for k in ('work','study')]
@@ -189,7 +189,7 @@ def finish_split(home,record,journal):
     if stage.parent.resolve()!=home.resolve() or not stage.name.startswith('.split-'): raise ValueError('迁移暂存路径无效')
     for key in ('work','study'):
         target=home/PROFILES[key].data_name; candidate=target if target.exists() else stage/target.name
-        marker=json.loads((candidate/MARKER).read_text())
+        marker=json.loads((candidate/MARKER).read_text(encoding='utf-8'))
         if marker.get('transaction')!=record['transaction'] or marker.get('product')!=key: raise ValueError('迁移目标已变化，未覆盖')
         if not target.exists(): os.replace(candidate,target)
     record['state']='complete'; write_json(journal,record)
@@ -203,7 +203,7 @@ def default_split_directory(data_home):
         return default_data_directory(data_home)
     journal=home/'.orbit-luma-split.json'
     if journal.exists():
-        record=json.loads(journal.read_text()); return split_data(Path(record['source']),home)[PROFILE.key]
+        record=json.loads(journal.read_text(encoding='utf-8')); return split_data(Path(record['source']),home)[PROFILE.key]
     source=home/'Orbit'
     if not source.exists(): source=Path(data_home)/'MomoLocal/Momo'
     old_lock=source/'momo.lock'
