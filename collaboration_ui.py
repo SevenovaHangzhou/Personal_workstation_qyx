@@ -1,4 +1,5 @@
 """Native, nonmodal colleague discovery, mutual task pairing and private sharing drafts."""
+import hashlib
 import json
 from pathlib import Path
 from PyQt5.QtCore import Qt,QTimer
@@ -69,7 +70,7 @@ class CollaborationDialog(QDialog):
     def __init__(self,owner,task_id=None):
         super().__init__(owner);self.owner=owner;self.client=owner.runtime.collaboration;self.task_id=task_id
         self.setWindowTitle('星序 · LAN Mesh 同事协作');self.resize(1060,780);self.setMinimumSize(760,600)
-        self.current_project=None;self.loaded_draft=None;self.loaded_note=None;self.previous_revision=-1
+        self.current_project=None;self.loaded_draft=None;self.loaded_note=None;self.loaded_note_sha256=hashlib.sha256(b'').hexdigest();self.previous_revision=-1
         self.snapshot={};self.editors={};self.await_preview=None;self.peer_signature=None;self.project_signature=None
         layout=box(self,margins=(22,18,22,16),spacing=10)
         heading=box(horizontal=True);heading.addWidget(label('同事协作','h2'));heading.addStretch()
@@ -261,7 +262,7 @@ class CollaborationDialog(QDialog):
         if not project or project==self.current_project:return
         if self.current_project and self.dirty() and not self.confirm('切换协作','有尚未保存的笔记、摘要或未发送消息。继续切换会丢失这些编辑，是否继续？'):
             self.project_list.blockSignals(True);self.project_list.setCurrentIndex(self.project_list.findData(self.current_project));self.project_list.blockSignals(False);return
-        self.current_project=project;self.loaded_note=None;self.loaded_draft=None;self.message_input.clear()
+        self.current_project=project;self.loaded_note=None;self.loaded_note_sha256=hashlib.sha256(b'').hexdigest();self.loaded_draft=None;self.message_input.clear()
         for editor in self.editors.values():editor.clear()
         self.render_project();self.client.watch(project)
 
@@ -281,9 +282,12 @@ class CollaborationDialog(QDialog):
         self.knowledge_generate_button.setEnabled(project['state']=='active' and not busy)
         self.knowledge_review_button.setVisible(generation.get('status')=='ready');self.knowledge_cancel_button.setVisible(busy)
         try:
-            path=safe_file(workspace['root'],NOTE_FILE);body=path.read_text() if path.exists() and path.stat().st_size<=512000 else ''
-            if self.loaded_note is None or (self.note_view.toPlainText()==self.loaded_note and body!=self.loaded_note):
-                self.note_view.setPlainText(body);self.loaded_note=body
+            path=safe_file(workspace['root'],NOTE_FILE)
+            raw=path.read_bytes() if path.exists() and path.stat().st_size<=512000 else b''
+            body=raw.decode('utf-8').replace('\r\n','\n').replace('\r','\n')
+            if self.loaded_note is None or self.note_view.toPlainText()==self.loaded_note:
+                if body!=self.loaded_note:self.note_view.setPlainText(body)
+                self.loaded_note=body;self.loaded_note_sha256=hashlib.sha256(raw).hexdigest()
         except (OSError,ValueError,UnicodeError) as exc:self.notice.setText(str(exc))
         draft=self.snapshot['drafts'].get(project['id'])
         if draft and (not self.loaded_draft or draft.get('id')!=self.loaded_draft.get('id')):
@@ -337,7 +341,7 @@ class CollaborationDialog(QDialog):
         if self.loaded_note is not None and self.note_view.toPlainText()!=self.loaded_note:
             self.notice.setText('有未保存编辑。请先保存，或从生成结果复制内容手动合并。')
             self.preview('核对知识库（可选择复制内容）',body,'返回编辑');return
-        if hashlib.sha256((self.loaded_note or '').encode()).hexdigest()!=row['base_sha256']:
+        if self.loaded_note_sha256!=row['base_sha256']:
             self.preview('原笔记已变化，请复制所需内容手动合并',body,'返回编辑');return
         if self.preview('核对生成的知识库',body,'保存到本地'):
             self.attempt(lambda:self.client.knowledge_apply(self.current_project,row['id'],row['base_sha256']))
@@ -346,7 +350,9 @@ class CollaborationDialog(QDialog):
         if not self.current_project:return
         def save():
             import hashlib
-            self.client.save_note(self.current_project,self.note_view.toPlainText(),hashlib.sha256((self.loaded_note or '').encode()).hexdigest());self.loaded_note=self.note_view.toPlainText()
+            body=self.note_view.toPlainText()
+            self.client.save_note(self.current_project,body,self.loaded_note_sha256)
+            self.loaded_note=body;self.loaded_note_sha256=hashlib.sha256(body.encode('utf-8')).hexdigest()
         self.attempt(save)
 
     def open_workspace(self,peer=False):

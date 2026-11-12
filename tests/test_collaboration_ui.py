@@ -1,6 +1,8 @@
 import os
 os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
 import threading
+from pathlib import Path
+from collaboration.knowledge import NOTE_FILE
 import unittest
 from unittest.mock import patch
 from test_ui import APP
@@ -67,5 +69,20 @@ class CollaborationUITests(MeshFixture,unittest.TestCase):
         project=self.pair();ui=self.dialog;ui.note_view.setPlainText('## 思路\n本机更新');ui.save_note()
         self.assertEqual(ui.loaded_note,'## 思路\n本机更新');self.assertEqual(self.state(self.b)['entries'],{})
         ui.copy_context();text=APP.clipboard().text();self.assertIn('同事知识库（同步副本）',text);self.assertIn('不必凑齐栏目',text);self.assertNotIn('服务器',text)
+
+    def test_crlf_notes_save_repeatedly_and_external_edits_still_conflict(self):
+        project=self.pair();ui=self.dialog
+        note=Path(self.state(self.a)['workspaces'][project]['root'])/NOTE_FILE
+        original='## 思路\r\n来自 Windows 编辑器\r\n'.encode('utf-8')
+        note.write_bytes(original);ui.render_project()
+        self.assertEqual(ui.loaded_note,'## 思路\n来自 Windows 编辑器\n')
+        ui.note_view.setPlainText('## 思路\n本机更新');ui.save_note()
+        self.assertEqual(note.read_bytes(),'## 思路\n本机更新'.encode('utf-8'))
+        ui.note_view.setPlainText('## 思路\n再次保存');ui.save_note()
+        self.assertEqual(note.read_bytes(),'## 思路\n再次保存'.encode('utf-8'))
+        ui.note_view.setPlainText('尚未保存的编辑');external='外部改动\r\n'.encode('utf-8')
+        note.write_bytes(external);ui.save_note()
+        self.assertEqual(note.read_bytes(),external);self.assertIn('已被 Codex',ui.notice.text())
+        self.assertEqual(self.state(self.b)['entries'],{})
 
 if __name__=='__main__':unittest.main()

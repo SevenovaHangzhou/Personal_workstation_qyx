@@ -3,6 +3,7 @@ import copy
 import json
 import os
 import sys
+import gc
 import tempfile
 import unittest
 import uuid
@@ -65,6 +66,7 @@ class PlanningTests(unittest.TestCase):
             self.window.deleteLater()
             APP.processEvents()
         self.runtime.close()
+        gc.collect()
         self.temp.cleanup()
 
     def rows(self):
