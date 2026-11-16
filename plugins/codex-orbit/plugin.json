@@ -1,0 +1,23 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "orbit",
+  "version": "0.2.0",
+  "description": "将 Linear My Issues 交给本地 Codex，并将有证据的开发结果回传到原 issue。",
+  "author": {"name": "Sevenova"},
+  "repository": "https://github.com/SevenovaHangzhou/Personal_workstation_qyx",
+  "keywords": ["linear", "tasks", "codex"],
+  "extensions": {
+    "com.openai": {
+      "requires_local_executor": true,
+      "onboardingSkill": "./skills/orbit-setup/SKILL.md",
+      "interface": {
+        "displayName": "星序 / ORBIT",
+        "shortDescription": "Linear 任务下发与开发结果回传",
+        "developerName": "Sevenova",
+        "category": "Productivity",
+        "capabilities": ["Read", "Write"],
+        "defaultPrompt": ["拉取我的 Linear 任务", "将本次开发结果整理并回传到当前 issue"]
+      }
+    }
+  }
+}

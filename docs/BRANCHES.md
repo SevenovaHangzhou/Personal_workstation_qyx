@@ -5,6 +5,7 @@
 | `main` | 星序 / ORBIT：工作、Demo、日常、Codex、Linear、日志、Git | `./run.sh` | `./run.ps1` |
 | `evaluator` | 星序评估：授权日志、问答、进度台账 | `./run-evaluator.sh` | `./run-evaluator.ps1` |
 | `luma` | 知序 / LUMA：学习、专注、课程、核心知识、答疑 | `./run-luma.sh` | `./run-luma.ps1` |
+| `codex/orbit-plugin` | ORBIT Codex 插件：Linear 任务、项目聊天派发、结果回传 | Python 3.11+ / Codex | Python 3.11+ / Codex |
 
 各产品分支均维护 Linux 与 Windows 支持；现有 `windows` 分支和历史标签保留。
 

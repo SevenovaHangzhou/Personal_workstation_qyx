@@ -1,0 +1,2 @@
+# Native onboarding card only; MCP and task synchronization remain stdlib-only.
+PyQt5>=5.15,<6

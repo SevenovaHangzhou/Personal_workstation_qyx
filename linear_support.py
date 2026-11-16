@@ -140,6 +140,55 @@ def fetch_my_issues(api_key, include_closed=False, cancel_event=None):
     raise LinearError("My Issues 超过单次拉取上限，请减少范围后重试")
 
 
+def normalize_issue_details(node, viewer_id):
+    if not isinstance(node, dict) or not node.get('id'):
+        raise LinearError('未找到指定 Linear issue')
+    state = node.get('state') or {}
+    team = node.get('team') or {}
+    project = node.get('project') or {}
+    parent = node.get('parent') or {}
+    milestone = node.get('projectMilestone') or {}
+    issue = {
+        'id': node.get('id', ''), 'identifier': node.get('identifier', ''), 'title': node.get('title', ''),
+        'description': node.get('description') or '', 'url': node.get('url', ''),
+        'updated_at': node.get('updatedAt') or '', 'due_date': node.get('dueDate') or '',
+        'priority': node.get('priority'), 'priority_label': node.get('priorityLabel') or '',
+        'state_id': state.get('id', ''), 'state_type': state.get('type', ''), 'state_name': state.get('name', ''),
+        'team_id': team.get('id', ''), 'team': team.get('name', ''), 'team_key': team.get('key', ''),
+        'project_id': project.get('id', ''), 'project_name': project.get('name', ''),
+        'project_slug_id': project.get('slugId', ''), 'project_url': project.get('url', ''),
+        'assignee_id': (node.get('assignee') or {}).get('id', ''),
+        'assignee_name': (node.get('assignee') or {}).get('name', ''),
+        'parent_issue_id': parent.get('id', ''), 'parent_identifier': parent.get('identifier', ''),
+        'parent_title': parent.get('title', ''), 'milestone_id': milestone.get('id', ''),
+        'milestone_name': milestone.get('name', ''), 'viewer_id': viewer_id,
+        'relations': node.get('relations', {}).get('nodes', []),
+        'inverse_relations': node.get('inverseRelations', {}).get('nodes', []),
+        'relations_truncated': bool((node.get('relations') or {}).get('pageInfo', {}).get('hasNextPage')) or bool((node.get('inverseRelations') or {}).get('pageInfo', {}).get('hasNextPage')),
+    }
+    required = ('id', 'identifier', 'title', 'url', 'state_type', 'state_name', 'team_id', 'team', 'viewer_id')
+    if any(not isinstance(issue.get(key), str) or not issue[key] for key in required):
+        raise LinearError('Linear issue 详情不完整')
+    return issue
+
+
+def fetch_issue_details(api_key, identifier, cancel_event=None):
+    if cancel_event is not None and cancel_event.is_set():
+        raise LinearError('已取消读取 issue 详情')
+    query = '''query OrbitIssueDetail($id: String!) { viewer { id name } issue(id: $id) {
+      id identifier title description url updatedAt dueDate priority priorityLabel
+      state { id name type } team { id name key } project { id name slugId url }
+      assignee { id name } parent { id identifier title } projectMilestone { id name }
+      relations(first: 50) { nodes { id type issue { id identifier title } relatedIssue { id identifier title } } pageInfo { hasNextPage } }
+      inverseRelations(first: 50) { nodes { id type issue { id identifier title } relatedIssue { id identifier title } } pageInfo { hasNextPage } }
+    } }'''
+    data = graphql(api_key, {'id': identifier}, query)
+    if cancel_event is not None and cancel_event.is_set():
+        raise LinearError('已取消读取 issue 详情')
+    viewer = data.get('viewer') or {}
+    return normalize_issue_details(data.get('issue'), viewer.get('id', ''))
+
+
 ISSUE_FIELDS = '''id identifier title description url dueDate updatedAt
   state { name type } team { id name } project { id name } parent { id } assignee { id }'''
 
