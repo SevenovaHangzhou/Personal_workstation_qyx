@@ -1,49 +1,82 @@
-# 星序 / ORBIT · Codex 插件 0.2.0
+# 星序 / ORBIT · Codex 插件 0.3.1
 
-Linear My Issues → 当前 Codex 会话开发 → 结果草稿 → 回传原 issue。
+Linear My Issues → Codex 专用聊天开发 → 结果草稿 → 确认后回传原 issue。
 
-原生本地插件，包含任务工作流、首次设置引导和 12 个 MCP 工具。无需启动星序桌面版，由 Codex 完成开发和总结。需要支持插件的新版 Codex、Python 3.11+；设置卡片使用 PyQt5，Linux/Windows 共用同一源码。
+包含设置卡片、任务聊天卡片和 15 个 MCP 工具。无需启动星序桌面版。支持 Linux / Windows，需先安装支持插件的 Codex CLI 和 Python 3.11+。
 
-## 安装
+[本次更新说明](CHANGELOG.md)
 
-将完整 ZIP 解压到固定位置。在该目录运行（不要只移动 `plugins/`）：
+## 安装与升级
 
-```bash
-python3 -m pip install -r plugins/codex-orbit/requirements-ui.txt
-python3 plugins/codex-orbit/scripts/configure.py
-codex plugin marketplace add .
+下载完整插件 ZIP，解压后在该目录运行：
+
+**Linux**
+
+```sh
+sh install.sh
+```
+
+**Windows**
+
+运行 `install.cmd`，或在 PowerShell 中执行 `.\install.ps1`。`install.cmd` 仅为本次安装放行 PowerShell 脚本，不修改全局执行策略。
+
+脚本自动准备独立 Python 环境、下载 PyQt5、注册 `sevenova` marketplace 并安装 `orbit@sevenova`，无需 sudo，不修改系统 Python。完成后新建 Codex 聊天，说“打开星序设置”，在卡片内填写 Linear API Key。密钥请勿发到聊天中。
+
+升级时运行同一命令。脚本保留本机配置和数据；下载、MCP 自检或安装失败会保留／恢复原分发目录。首次安装需要联网下载依赖，已有环境重复使用。安装后可以删除下载的 ZIP 与解压目录。
+
+**源码安装**：在仓库根目录运行 `sh plugins/codex-orbit/install.sh`，Windows 运行 `.\plugins\codex-orbit\install.ps1`。
+
+可选参数（追加到同一命令后）：
+
+| 参数 | 用途 |
+| --- | --- |
+| `--dry-run` | 预览路径和步骤，不写文件、不下载 |
+| `--headless` | 仅核心 MCP，不下载图形依赖；在终端隐藏输入密钥 |
+| `--use-existing-python` | 使用已有 PyQt5 的解释器，省去独立环境与下载 |
+| `--python PATH` | 指定 Python 3.11+，通常作为独立环境的基础解释器 |
+| `--credentials-from PATH` | 只读取星序桌面版已有凭据，不覆盖它 |
+| `--data-dir PATH` | 指定插件数据目录，需为绝对路径 |
+| `--codex PATH` | 指定 Codex CLI 可执行文件 |
+| `--install-dir PATH` | 指定专用 marketplace 目录，需为空或已有 ORBIT 分发 |
+| `--no-codex` | 仅准备安装文件与环境，稍后在 Codex 中安装 |
+
+默认分发目录是用户数据目录内的 `Sevenova/OrbitCodexPlugin/marketplace`，独立环境在相邻的 `marketplace-runtime`。插件任务和密钥另存于 Linux `~/.local/share/Sevenova/OrbitCodex` 或 Windows `%LOCALAPPDATA%\Sevenova\OrbitCodex`。升级不迁移这些数据。
+
+## 标准 marketplace 安装
+
+脚本使用 Codex 官方 marketplace 命令。若先用 `--no-codex` 准备好分发目录，也可以手动添加该目录，再在 Codex `/plugins` 中选择「星序 / ORBIT」安装：
+
+```sh
+codex plugin marketplace add /absolute/path/to/marketplace
 codex plugin add orbit@sevenova
 ```
 
-`configure.py` 必须用准备给插件使用的 Python 3.11+ 运行；Windows 可以将 `python3` 换成 `py -3.11` 或实际 Python 路径。它把该解释器写入 MCP 启动配置。已有 PyQt5 时可省略依赖安装。
+官方还支持 Git 仓库来源。当前源码分支的插件依赖项目共享模块，**需要先运行上述安装脚本打包**，不能直接把未打包源码当作可运行的 marketplace。插件尚未发布到公共插件目录。[官方规范](https://developers.openai.com/plugins/build/plugins)
 
-在插件中运行首次设置，或对 Codex 说“打开星序设置”，即可显示原生小卡片。卡片中填写 Linear API Key、测试连接、确认账号并保存，可选默认工作目录。首次实际拉取任务缺少密钥时，也会尝试打开一次；已配置后不反复弹出。卡片独立运行，保存后立即生效，Codex 可继续处理其他事情。重复打开会激活已有卡片。
+## 使用
 
-密钥不进入聊天、MCP 参数、命令参数或日志。更换／移除只影响插件自己的密钥。环境变量 `LINEAR_API_KEY` 优先于本地配置；卡片会显示其来源并禁用密钥更换，避免保存后实际不生效。无可见桌面的 CLI 用户仍可用 `python3 plugins/codex-orbit/scripts/mcp.py --setup` 在终端隐藏输入。
-
-已有桌面版凭据时，第一步可改为：
-
-```bash
-python3 plugins/codex-orbit/scripts/configure.py --credentials-from /absolute/path/to/orbit-data
-```
-
-插件只读取已有桌面凭据；卡片中另存的新密钥优先于共享来源，不覆盖桌面版。若密钥环后端需要 `keyring`，请使用桌面版对应 Python 环境。修改启动配置后，重新安装插件刷新缓存。
-
-重开 Codex 会话，使用 `$orbit-work`，或在插件列表选择「星序 / ORBIT」。例如：
+新建 Codex 聊天，使用 `$orbit-work` 或直接说：
 
 - “拉取我的 Linear 任务。”
 - “在当前项目处理 ENG-123。”
-- “为 ENG-123 在对应的 Codex 项目中新建专用聊天并开始开发。”
-- “整理这个任务的代码变动和测试结果，回传到 Linear。”
+- “为 ENG-123 在对应项目中新建专用聊天。”
+- “整理开发结果和测试证据，回传到原 issue。”
 
-首次只拉取供选择。请求新聊天时，通过 Codex 桌面宿主的 `codex-app-tools` 按目录复用已有项目、创建 issue 专用聊天并保存关联；再次派发返回已有聊天。新仓库首次需在 Codex 添加为本地项目，当前接口不支持自动添加侧栏项目。CLI 未提供这些宿主工具时可在当前会话开发。不新建嵌套 CLI，也不后台批量领取。结果默认保存草稿；有用户回传授权后才发布。
+拉取后整理宿主提供的聊天清单：唯一同名聊天自动绑定，重名或失效目录待核对；无聊天任务通过卡片选择项目后再创建。新仓库需先加入 Codex 本地项目。专用聊天依赖桌面宿主的 `codex-app-tools`，CLI 可在当前会话开发。结果默认保存草稿，取得回传授权才发布评论。
 
-## 数据与边界
+设置卡片可测试账号、修改插件密钥和默认工作目录。凭据优先级为 `LINEAR_API_KEY` → 插件凭据 → 指定桌面版凭据；保存后下一次工具调用生效。`--headless` 用户可运行：
 
-- Linux 默认 `~/.local/share/Sevenova/OrbitCodex`；Windows 默认 `%LOCALAPPDATA%\Sevenova\OrbitCodex`。可在配置时指定 `--data-dir`。
-- 使用独立 SQLite 数据空间，多会话共享领取关联与结果账本。保留本地任务、目录、可选会话 ID、结果快照及发布状态；不读取桌面版任务库或扫描聊天。
-- 远端仅拉取 My Issues / issue 详情、追加结果评论并读回核对，不更改 issue 状态、负责人或父子关系，不上传文件与原始聊天。
-- 网络中断后保留草稿，用相同结果 ID 重试。卸载插件不会删除数据或密钥。
-- 本版为本地 marketplace 分发包，尚未提交公共插件目录。Windows 安装流程已提供，实际 Windows 运行需在 Windows 验证。
+```sh
+python3 /absolute/path/to/marketplace/plugins/codex-orbit/scripts/mcp.py --setup
+```
 
-从源码构建：在项目根目录运行 `python3 scripts/build_codex_plugin.py --output /absolute/new/output`，生成完整分发目录、ZIP 和 SHA-256。
+## 卸载与排查
+
+```sh
+codex plugin remove orbit@sevenova
+codex plugin marketplace remove sevenova
+```
+
+卸载保留本机分发、数据和密钥。安装失败先检查 Codex / Python 版本与网络，再运行同一命令。安装成功后看不到工具时，新建 Codex 会话并运行 `codex plugin list --marketplace sevenova --json` 核对版本与启用状态。Windows 的源码和入口已覆盖，实际 Windows 桌面运行仍需在 Windows 验证。
+
+从源码构建 ZIP：`python3 scripts/build_codex_plugin.py --output /absolute/new/output`，输出完整 marketplace、根目录安装入口、ZIP 和 SHA-256。

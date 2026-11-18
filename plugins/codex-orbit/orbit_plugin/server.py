@@ -58,8 +58,16 @@ TOOLS = {
         'confirm': {'type': 'boolean', 'const': True, 'description': '用户已授权本次回传后设为 true；正文哈希用于核对内容，不能替代授权。'}
     }, ['result_id', 'body_sha256', 'confirm']))
 }
-READ_ONLY = {'status', 'list_my_issues', 'list_tasks', 'get_task', 'preview_result', 'list_results'}
-NETWORK = {'list_my_issues', 'start_task', 'publish_result'}
+TOOLS.update({
+    'sync_issue_chats': ('拉取 issue 后的默认步骤：传入完整宿主聊天清单，自动绑定唯一同名聊天，返回缺少聊天的卡片计划。不会新建聊天。', schema({
+        'threads': {'type': 'array', 'maxItems': 5000, 'items': {'type': 'object', 'properties': {key: string(key, 4096) for key in ('id', 'title', 'cwd', 'hostId', 'kind')}, 'required': ['id', 'title', 'cwd', 'hostId', 'kind'], 'additionalProperties': True}},
+        'projects': TOOLS['prepare_chat'][1]['properties']['projects']
+    }, ['threads', 'projects'])),
+    'open_chat_card': ('打开任务聊天卡片，选择缺少聊天的任务及本地项目；卡片保存选择，宿主负责创建聊天。', schema({'plan_id': ID}, ['plan_id'])),
+    'get_chat_plan': ('读取卡片选择。仅 state=selected 的 selection 是用户确认的补建请求；waiting/cancelled 不得创建。', schema({'plan_id': ID}, ['plan_id']))
+})
+READ_ONLY = {'get_chat_plan', 'status', 'list_my_issues', 'list_tasks', 'get_task', 'preview_result', 'list_results'}
+NETWORK = {'sync_issue_chats', 'list_my_issues', 'start_task', 'publish_result'}
 
 
 def validate(name, arguments):
@@ -81,10 +89,10 @@ def validate(name, arguments):
             raise OrbitError('invalid_arguments', '数量必须在 1–100 之间。')
         if expected is list:
             if len(value) > prop['maxItems']:
-                raise OrbitError('invalid_arguments', '项目数量超过上限。')
+                raise OrbitError('invalid_arguments', '清单数量超过上限。')
             for item in value:
                 if type(item) is not dict or any(not isinstance(item.get(field), str) for field in prop['items']['required']):
-                    raise OrbitError('invalid_arguments', '请传入宿主 list_projects 返回的真实项目记录。')
+                    raise OrbitError('invalid_arguments', '请传入宿主返回的真实记录。')
                 for field in prop['items']['required']:
                     text(item[field], field, prop['items']['properties'][field].get('maxLength', 256), empty=field == 'path')
 

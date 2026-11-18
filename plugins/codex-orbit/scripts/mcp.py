@@ -27,12 +27,16 @@ def main():
     parser.add_argument('--data-dir', default=os.environ.get('ORBIT_DATA_DIR', settings.get('data_dir')))
     parser.add_argument('--credentials-dir', default=os.environ.get('ORBIT_CREDENTIALS_DIR', settings.get('credentials_dir')))
     parser.add_argument('--setup', action='store_true', help='在本机终端中输入 Linear API Key；不要把密钥放入聊天或命令参数')
+    parser.add_argument('--chat-card', help='打开任务聊天卡片计划')
     parser.add_argument('--settings', action='store_true', help='打开本机原生设置卡片')
     parser.add_argument('--status', action='store_true')
     args = parser.parse_args()
     try:
         orbit = Orbit(args.data_dir, credential_directory=args.credentials_dir)
-        if args.settings:
+        if args.chat_card:
+            from orbit_plugin.chat_card_ui import run_card
+            raise SystemExit(run_card(orbit.directory, args.chat_card))
+        elif args.settings:
             try:
                 from orbit_plugin.settings_ui import run_card
             except ImportError:

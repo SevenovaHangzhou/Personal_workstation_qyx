@@ -1,5 +1,7 @@
 # 星序 / ORBIT
 
+本分支维护 **Codex 插件 0.3.1**：[安装与使用](plugins/codex-orbit/README.md) · [版本说明](plugins/codex-orbit/CHANGELOG.md)。源码安装：Linux 运行 `sh plugins/codex-orbit/install.sh`，Windows 运行 `plugins\codex-orbit\install.cmd`。需要 Codex CLI 与 Python 3.11+。
+
 原生桌面工作助手：管理工作、Demo 和日常任务，关联 Codex 与 Linear，记录日报、周报和 Git 留存。
 
 支持 Linux x86_64、Windows 10/11 x64，可调整窗口与字体。

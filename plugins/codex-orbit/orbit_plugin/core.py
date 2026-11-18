@@ -79,6 +79,18 @@ class Orbit:
             raise OrbitError('missing_credentials', '请在本机星序设置卡片中保存 Linear 凭据。密钥不要发送到聊天。')
         return value
 
+    def sync_issue_chats(self, cancel, threads, projects):
+        from .chat_card import reconcile
+        return reconcile(self, cancel, threads, projects)
+
+    def open_chat_card(self, plan_id):
+        from .chat_card import open_card
+        return open_card(self, plan_id)
+
+    def get_chat_plan(self, plan_id):
+        from .chat_card import read_plan
+        return read_plan(self.directory, plan_id)
+
     def open_settings(self):
         from .settings import open_card
         return open_card(self.directory, self.credential_directory)

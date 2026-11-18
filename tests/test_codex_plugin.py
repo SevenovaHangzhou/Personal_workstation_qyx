@@ -320,7 +320,7 @@ serve(WaitingOrbit(sys.argv[3]))
                 handshake = rpc(1, 'initialize', {'protocolVersion': '2025-03-26', 'capabilities': {}, 'clientInfo': {'name': 'test', 'version': '1'}})
                 self.assertEqual(handshake['result']['serverInfo']['name'], 'orbit')
                 tools = rpc(2, 'tools/list', {})['result']['tools']
-                self.assertEqual(len(tools), 12)
+                self.assertEqual(len(tools), 15)
                 self.assertNotIn('sync_once', {tool['name'] for tool in tools})
                 status = json.loads(rpc(3, 'tools/call', {'name': 'status', 'arguments': {}})['result']['content'][0]['text'])
                 self.assertEqual(status['data_directory'], str(data))

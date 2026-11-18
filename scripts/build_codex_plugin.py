@@ -36,6 +36,25 @@ def build(destination):
     catalog = destination / '.agents/plugins/marketplace.json'
     catalog.parent.mkdir(parents=True)
     catalog.write_text(json.dumps(marketplace, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    # Put the common installation entry points at the ZIP root as well.
+    (destination / 'install.sh').write_text(
+        '#!/bin/sh\nset -eu\nhere=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\n'
+        'exec sh "$here/plugins/codex-orbit/install.sh" "$@"\n', encoding='utf-8')
+    (destination / 'install.ps1').write_text(
+        "$ErrorActionPreference = 'Stop'\n"
+        "& (Join-Path $PSScriptRoot 'plugins/codex-orbit/install.ps1') @args\n"
+        'exit $LASTEXITCODE\n', encoding='utf-8')
+    (destination / 'install.cmd').write_bytes(
+        b'@echo off\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File '
+        b'"%~dp0install.ps1" %*\r\nexit /b %errorlevel%\r\n')
+    (destination / 'INSTALL.md').write_text(
+        '# 星序 / ORBIT Codex 插件\n\n'
+        '解压完整 ZIP。Linux：`sh install.sh`；Windows：运行 `install.cmd`（或 PowerShell `.\\install.ps1`）。\n\n'
+        '需要 Codex CLI 和 Python 3.11+。默认创建独立 Python 环境并下载 PyQt5，'
+        '完成后新建 Codex 聊天，输入“打开星序设置”。\n\n'
+        '更新时运行同一命令，保留本机设置与数据。仅核心 MCP：加 `--headless`；'
+        '预览：加 `--dry-run`；已有 PyQt5：加 `--use-existing-python`。\n\n'
+        '详细说明：[安装与使用](plugins/codex-orbit/README.md)。\n', encoding='utf-8')
     version = json.loads((plugin / 'plugin.json').read_text(encoding='utf-8'))['version']
     files = {str(path.relative_to(destination)): hashlib.sha256(path.read_bytes()).hexdigest()
              for path in sorted(destination.rglob('*')) if path.is_file()}
