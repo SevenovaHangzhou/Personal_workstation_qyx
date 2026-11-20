@@ -1,6 +1,15 @@
 # 星序 / ORBIT
 
-本分支维护 **Codex 插件 0.3.1**：[安装与使用](plugins/codex-orbit/README.md) · [版本说明](plugins/codex-orbit/CHANGELOG.md)。源码安装：Linux 运行 `sh plugins/codex-orbit/install.sh`，Windows 运行 `plugins\codex-orbit\install.cmd`。需要 Codex CLI 与 Python 3.11+。
+本分支维护 **Codex 插件 0.3.2**：[安装与使用](plugins/codex-orbit/README.md) · [版本说明](plugins/codex-orbit/CHANGELOG.md)。源码安装：Linux 运行 `sh plugins/codex-orbit/install.sh`，Windows 运行 `plugins\codex-orbit\install.cmd`。需要 Codex CLI 与 Python 3.11+。
+
+npm 安装并启用插件：
+
+```sh
+npm install -g "git+https://github.com/SevenovaHangzhou/Personal_workstation_qyx.git#codex/orbit-plugin"
+orbit-codex install
+```
+
+需要 Node.js 18+、Git、Codex CLI、Python 3.11+。安装后新建 Codex 聊天，说“打开星序设置”。当前从 Git 分支安装，尚未发布 npm registry。[npx 与更多参数](plugins/codex-orbit/README.md#npm-安装linux--windows)
 
 原生桌面工作助手：管理工作、Demo 和日常任务，关联 Codex 与 Linear，记录日报、周报和 Git 留存。
 

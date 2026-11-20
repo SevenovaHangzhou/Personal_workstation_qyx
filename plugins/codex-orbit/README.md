@@ -1,4 +1,4 @@
-# 星序 / ORBIT · Codex 插件 0.3.1
+# 星序 / ORBIT · Codex 插件 0.3.2
 
 Linear My Issues → Codex 专用聊天开发 → 结果草稿 → 确认后回传原 issue。
 
@@ -6,7 +6,40 @@ Linear My Issues → Codex 专用聊天开发 → 结果草稿 → 确认后回�
 
 [本次更新说明](CHANGELOG.md)
 
-## 安装与升级
+## npm 安装（Linux / Windows）
+
+需要 Node.js 18+（建议当前 LTS）、npm、Git，以及 Codex CLI 和 Python 3.11+。当前通过 GitHub 分支分发，无需 npm 账号：
+
+```sh
+npm install -g "git+https://github.com/SevenovaHangzhou/Personal_workstation_qyx.git#codex/orbit-plugin"
+orbit-codex install
+```
+
+不想全局安装时，直接用 npx：
+
+```sh
+npx --yes --package="git+https://github.com/SevenovaHangzhou/Personal_workstation_qyx.git#codex/orbit-plugin" orbit-codex install
+```
+
+`npm install` 只安装 `orbit-codex` 命令；运行 `install` 才准备 Python 环境、下载图形依赖并配置 Codex。两种方式都把插件复制到稳定目录，npm 更新、卸载或 npx 缓存清理不影响已安装的插件与数据。API Key 在随后打开的本机设置卡片填写。
+
+升级：重新执行全局安装命令，再运行 `orbit-codex install`。需要固定版本时，把 URL 的 `#codex/orbit-plugin` 换成已核对的完整提交 SHA。
+
+所有下列安装参数都可追加，例如：
+
+```sh
+orbit-codex install --dry-run
+orbit-codex install --headless
+orbit-codex install --python "/absolute/path/to/python" --use-existing-python
+```
+
+`orbit-codex --version` 查看版本，`orbit-codex --help` 查看用法。若提示找不到命令，请把 npm 全局命令目录加入 PATH，或使用 npx；遇到全局目录权限问题时也可使用 npx，无需为插件配置使用 sudo。
+
+包标识为 `@sevenova/orbit-codex`，**尚未发布到 npm registry**，目前使用上述 Git 地址，不使用 `npm install -g @sevenova/orbit-codex`。源码包的 `private: true` 防止误发布。npm 安装不自动运行 Python 或修改 Codex，也没有 npm 第三方运行依赖。
+
+卸载 npm 命令：`npm uninstall -g @sevenova/orbit-codex`。若还要卸载 Codex 插件，使用文末的 Codex 卸载命令；本机任务和密钥仍保留。
+
+## ZIP 安装与升级
 
 下载完整插件 ZIP，解压后在该目录运行：
 

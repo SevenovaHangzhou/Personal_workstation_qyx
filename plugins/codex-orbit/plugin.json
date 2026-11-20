@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "orbit",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "将 Linear My Issues 交给本地 Codex，并将有证据的开发结果回传到原 issue。",
   "author": {
     "name": "Sevenova"

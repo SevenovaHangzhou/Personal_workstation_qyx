@@ -41,3 +41,7 @@ credentials.json
 
 release/**/*.zip
 release/**/*.exe
+
+# npm local installs and packed artifacts
+node_modules/
+*.tgz

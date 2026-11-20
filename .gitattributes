@@ -4,3 +4,4 @@ release/**/WINDOWS-SHA256SUMS -text
 # Keep plugin launchers usable after checkouts on either platform.
 plugins/codex-orbit/install.cmd text eol=crlf
 plugins/codex-orbit/install.sh text eol=lf
+bin/*.cjs text eol=lf

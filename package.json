@@ -1,0 +1,62 @@
+{
+  "name": "@sevenova/orbit-codex",
+  "version": "0.3.2",
+  "private": true,
+  "description": "ORBIT Codex 插件安装器：Linear 任务、项目聊天与开发结果回传",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "orbit-codex": "bin/orbit-codex.cjs"
+  },
+  "files": [
+    "bin/orbit-codex.cjs",
+    "credentials.py",
+    "dag_layout.py",
+    "data_paths.py",
+    "git_support.py",
+    "linear_support.py",
+    "model.py",
+    "platform_support.py",
+    "plugins/codex-orbit/CHANGELOG.md",
+    "plugins/codex-orbit/README.md",
+    "plugins/codex-orbit/install.cmd",
+    "plugins/codex-orbit/install.ps1",
+    "plugins/codex-orbit/install.sh",
+    "plugins/codex-orbit/mcp.json",
+    "plugins/codex-orbit/orbit_plugin/__init__.py",
+    "plugins/codex-orbit/orbit_plugin/chat_card.py",
+    "plugins/codex-orbit/orbit_plugin/chat_card_ui.py",
+    "plugins/codex-orbit/orbit_plugin/core.py",
+    "plugins/codex-orbit/orbit_plugin/server.py",
+    "plugins/codex-orbit/orbit_plugin/settings.py",
+    "plugins/codex-orbit/orbit_plugin/settings_ui.py",
+    "plugins/codex-orbit/plugin.json",
+    "plugins/codex-orbit/requirements-ui.txt",
+    "plugins/codex-orbit/scripts/configure.py",
+    "plugins/codex-orbit/scripts/install.py",
+    "plugins/codex-orbit/scripts/mcp.py",
+    "plugins/codex-orbit/skills/orbit-setup/SKILL.md",
+    "plugins/codex-orbit/skills/orbit-work/SKILL.md",
+    "process_environment.py",
+    "qt_runtime.py",
+    "scripts/build_codex_plugin.py",
+    "task_plan.py",
+    "windows_credentials.py"
+  ],
+  "scripts": {
+    "test": "node tests/test_codex_npm.cjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SevenovaHangzhou/Personal_workstation_qyx.git"
+  },
+  "homepage": "https://github.com/SevenovaHangzhou/Personal_workstation_qyx/tree/codex/orbit-plugin",
+  "keywords": [
+    "codex",
+    "linear",
+    "orbit",
+    "installer"
+  ]
+}

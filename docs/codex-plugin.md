@@ -38,3 +38,11 @@
 ### 拉取后的任务聊天卡片
 
 拉取后由宿主提供完整聊天清单，`sync_issue_chats` 自动绑定唯一同名聊天，保留已有绑定；重名和失效目录进入待核对列表。`open_chat_card` 展示待创建任务及本机项目选择，`get_chat_plan` 返回用户选择。创建仍通过 Codex 的原生 `create_thread`，随后绑定真实聊天 ID。卡片不直接控制宿主，不默认开展开发，也不修改 Linear 状态。
+
+### npm 入口（0.3.2）
+
+仓库根目录的 `package.json` 提供 `@sevenova/orbit-codex` 包及 `orbit-codex` 命令。`files` 是准确文件清单：包含 Node 启动器、Python 构建脚本、完整插件及允许的共享模块，排除设备设置、密钥、桌面 runtime 与历史数据。包不使用 npm install/prepare 生命周期脚本，没有 npm 运行依赖。`private: true` 表明目前仅从 Git / 本地 tarball 安装，防止意外发布到公共 registry。
+
+`npm install -g <Git URL#ref>` 安装命令；`orbit-codex install` 检测可用 Python 3.11+（Windows 优先尝试 py -3），用参数数组启动原 Python 安装器，不拼 shell 命令。用户指定 `--python` 失败时明确报错，不偷偷切换解释器。安装退出码向外传播。npx 与全局安装都使用原安装器的固定目标，因此可安全清理 npm 包缓存；不向 npm 或 GitHub 传递 Linear 密钥。
+
+npm 模式仍要求本机具备 Python 和 Codex；它提供分发与命令入口，不将应用改为 Node 或网页。打包通过 `npm pack`，维护者可用 `npm test` 检查命令入口，用 Python 测试验证 tarball 清单和安装链路。官方依据：[npm bin 与文件清单](https://docs.npmjs.com/cli/v11/configuring-npm/package-json/)、[Git 来源安装](https://docs.npmjs.com/cli/v11/commands/npm-install/)、[npm exec / npx](https://docs.npmjs.com/cli/v11/commands/npm-exec/)。
