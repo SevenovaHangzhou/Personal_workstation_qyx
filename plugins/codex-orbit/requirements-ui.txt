@@ -1,2 +1,3 @@
-# Native onboarding card only; MCP and task synchronization remain stdlib-only.
+# Native cards and opt-in LAN journal TLS certificates.
 PyQt5>=5.15,<6
+cryptography>=41

@@ -1,0 +1,2 @@
+# Optional for headless LAN serving; task/result MCP remains stdlib-only.
+cryptography>=41

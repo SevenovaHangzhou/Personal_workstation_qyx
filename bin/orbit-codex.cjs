@@ -17,13 +17,15 @@ function help() {
 安装参数：
   --python PATH             Python 3.11+ 的解释器路径
   --headless                仅核心 MCP，不下载图形依赖
-  --use-existing-python     使用已有 PyQt5 的解释器，不创建独立环境
+  --use-existing-python     使用已有 PyQt5 / cryptography 的解释器，不创建独立环境
   --dry-run                 预览，不写文件或下载
   --data-dir PATH           插件数据目录（绝对路径）
   --credentials-from PATH   只读取已有星序凭据目录
   --codex PATH              Codex CLI 可执行文件
   --install-dir PATH        专用 marketplace 目录
-  --no-codex                只准备插件分发，不注册 Codex
+  --no-codex                只准备插件分发，不注册 Codex 和定时任务
+  --daily-time HH:MM         每日收集时间，首次默认 00:00
+  --no-schedule             跳过系统定时任务注册
 
 npm 安装只提供本命令；运行 install 才配置 Codex 和 Python 环境。
 升级：先更新 npm 包，再运行 orbit-codex install。

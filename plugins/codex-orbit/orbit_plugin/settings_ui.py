@@ -139,8 +139,26 @@ class SettingsCard(QDialog):
         bottom.addStretch()
         bottom.addWidget(self.close_button)
         layout.addLayout(bottom)
+        self.lan_button = QPushButton('局域网日志与管理员共享')
+        self.lan_button.clicked.connect(self.open_lan)
+        layout.addWidget(self.lan_button)
+        self.schedule_button = QPushButton('日报定时收集')
+        self.schedule_button.clicked.connect(self.open_schedule)
+        layout.addWidget(self.schedule_button)
         layout.addStretch()
         self.refresh()
+
+    def open_lan(self):
+        from .core import Orbit
+        from .lan import open_card
+        value = open_card(Orbit(self.settings.directory))
+        self.notice.setText(value.get('message', '当前无可见桌面，请在本机运行 scripts/mcp.py --lan。'))
+
+    def open_schedule(self):
+        from .core import Orbit
+        from .scheduler import open_card
+        value=open_card(Orbit(self.settings.directory))
+        self.notice.setText(value.get('message','请在本机运行 scripts/mcp.py --schedule。'))
 
     def refresh(self):
         try:

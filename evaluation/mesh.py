@@ -257,13 +257,13 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
-            if self.path not in ('/v1/manifest', '/v1/record', '/v1/attachments', '/v1/attachment', '/v1/report_manifest', '/v1/report'):
+            if self.path not in ('/v1/manifest', '/v1/record', '/v1/attachments', '/v1/attachment', '/v1/report_manifest', '/v1/report', '/v1/shared_manifest', '/v1/shared_file'):
                 self.reply(404, {'error': '未知只读接口'})
                 return
             if self.headers.get_all('X-Orbit-Protocol') != [PROTOCOL]:
                 raise ValueError('日志协议版本不符')
             auth = self.headers.get_all('Authorization', [])
-            scope = 'full_reports' if self.path in ('/v1/report_manifest', '/v1/report') else None
+            scope = 'full_reports' if self.path in ('/v1/report_manifest', '/v1/report', '/v1/shared_manifest', '/v1/shared_file') else None
             if len(auth) != 1 or not auth[0].startswith('Bearer ') or not self.server.owner._authorized(auth[0][7:], scope):
                 raise PermissionError('日志共享未授权或已撤销')
             if self.headers.get('Transfer-Encoding') or self.headers.get('Content-Encoding'):
@@ -283,6 +283,30 @@ class _Handler(BaseHTTPRequestHandler):
             # request cannot be used to start reading a journal.
             if not self.server.owner._authorized(auth[0][7:], scope):
                 raise PermissionError('日志共享授权已撤销')
+            if self.path == '/v1/shared_file':
+                from evaluation.shared_store import MAX_FILE
+                raw = self.server.owner.shared_callback('shared_file', payload)
+                if not isinstance(raw, bytes) or len(raw) > MAX_FILE:
+                    raise ValueError('共享文件超过限制')
+                if not self.server.owner._authorized(auth[0][7:], scope):
+                    raise PermissionError('日志共享授权已撤销')
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/octet-stream')
+                self.send_header('Content-Length', str(len(raw)))
+                self.send_header('X-Orbit-Protocol', PROTOCOL)
+                self.send_header('X-Orbit-Employee', self.server.owner.employee_id)
+                self.send_header('Connection', 'close')
+                self.send_header('Cache-Control', 'no-store')
+                self.end_headers()
+                self.close_connection = True
+                try:
+                    for offset in range(0, len(raw), 64 * 1024):
+                        if not self.server.owner._authorized(auth[0][7:], scope):
+                            break
+                        self.wfile.write(memoryview(raw)[offset:offset + 64 * 1024])
+                except OSError:
+                    pass
+                return
             result = self.server.owner._read(self.path, payload)
             limit = (MAX_ATTACHMENT_RESPONSE if self.path == '/v1/attachment' else
                      MAX_MANIFEST if self.path.endswith(('manifest', 'attachments')) else MAX_RESPONSE)
@@ -301,7 +325,7 @@ class _Handler(BaseHTTPRequestHandler):
 
 class ShareServer:
     """A stopped-by-default, authenticated read view over frozen authorized rows."""
-    def __init__(self, folder, employee_id, name, records_callback, attachments_callback=None, reports_callback=None):
+    def __init__(self, folder, employee_id, name, records_callback, attachments_callback=None, reports_callback=None, shared_callback=None, authorized_callback=None):
         self.folder = Path(folder)
         self.employee_id = _identifier(employee_id)
         self.name = _name(name)
@@ -314,6 +338,8 @@ class ShareServer:
         if reports_callback is not None and not callable(reports_callback):
             raise TypeError('reports_callback 必须可调用')
         self.reports_callback = reports_callback
+        self.shared_callback = shared_callback
+        self.authorized_callback = authorized_callback
         self.lock = threading.RLock()
         self.server = None
         self.thread = None
@@ -364,6 +390,8 @@ class ShareServer:
             self._save()
 
     def _authorized(self, token, scope=None):
+        if self.authorized_callback is not None and not self.authorized_callback():
+            return False
         if not isinstance(token, str) or not _TOKEN.fullmatch(token):
             return False
         digest = hashlib.sha256(token.encode()).hexdigest()
@@ -389,6 +417,10 @@ class ShareServer:
         return records
 
     def _read(self, path, payload):
+        if path == '/v1/shared_manifest':
+            if not self.shared_callback:
+                raise PermissionDenied('此员工端未提供 Shared Store')
+            return dict(employee_id=self.employee_id, result=self.shared_callback('shared_manifest', payload))
         if path in ('/v1/report_manifest', '/v1/report'):
             if not self.reports_callback:
                 raise PermissionDenied('此员工端未提供完整报告共享')

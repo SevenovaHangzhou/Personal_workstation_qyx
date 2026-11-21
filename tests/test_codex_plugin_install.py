@@ -168,6 +168,30 @@ class CodexPluginInstallTests(unittest.TestCase):
                 self.module.prepare_python(sys.executable,self.dist,existing=True)
         self.assertEqual((self.dist/'plugins/codex-orbit/mcp.json').read_bytes(),original)
 
+    def test_successful_codex_install_registers_schedule_using_the_stable_entry(self):
+        args=argparse.Namespace(source=str(ROOT),python=sys.executable,install_dir=str(self.dist),headless=True,
+            use_existing_python=False,data_dir=str(self.root/'data'),credentials_from=None,no_codex=False,
+            codex='codex',enable_plugins=False,dry_run=False,daily_time='23:30',no_schedule=False)
+        execute=self.module.execute
+        registered=[]
+        def spy(command,**kwargs):
+            if '--install-schedule' in command:
+                registered.append([str(value) for value in command])
+                return json.dumps(dict(config=dict(time='23:30',enabled=True)))
+            return execute(command,**kwargs)
+        with mock.patch.object(self.module,'find_codex',return_value='codex'), \
+             mock.patch.object(self.module,'configured_marketplaces',return_value={}), \
+             mock.patch.object(self.module,'install_codex'),mock.patch.object(self.module,'execute',side_effect=spy):
+            self.module.install(args)
+        self.assertEqual(registered,[[sys.executable,str(self.dist/'plugins/codex-orbit/scripts/mcp.py'),
+                                     '--install-schedule','--daily-time','23:30']])
+        self.assertFalse((self.root/'data').exists())  # Installation never collects real chats.
+
+    def test_invalid_daily_time_is_rejected_before_installation(self):
+        result=self.install('--daily-time','24:00')
+        self.assertEqual(result.returncode,2)
+        self.assertFalse(self.dist.exists())
+
     def test_plugins_flag_opt_in_preserves_other_toml(self):
         original='model = "test"\n[features]\nweb = true\n[other]\nvalue = 1\n'
         updated=self.module.with_plugins_flag(original)

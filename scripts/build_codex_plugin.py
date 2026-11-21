@@ -9,7 +9,9 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SHARED = ('linear_support.py', 'model.py', 'git_support.py', 'task_plan.py', 'dag_layout.py',
-          'process_environment.py', 'credentials.py', 'windows_credentials.py', 'data_paths.py', 'platform_support.py', 'qt_runtime.py')
+          'process_environment.py', 'credentials.py', 'windows_credentials.py', 'data_paths.py', 'platform_support.py', 'qt_runtime.py',
+          'evaluation/__init__.py', 'evaluation/mesh.py', 'evaluation/protocol.py',
+          'evaluation/report_archive.py', 'evaluation/shared_store.py')
 
 
 def build(destination):
@@ -28,6 +30,7 @@ def build(destination):
     shared = plugin / 'shared'
     shared.mkdir()
     for name in SHARED:
+        (shared / name).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / name, shared / name)
     marketplace = {'name': 'sevenova', 'interface': {'displayName': 'Sevenova / 七耀星'},
                    'plugins': [{'name': 'orbit', 'source': {'source': 'local', 'path': './plugins/codex-orbit'},
@@ -50,10 +53,12 @@ def build(destination):
     (destination / 'INSTALL.md').write_text(
         '# 星序 / ORBIT Codex 插件\n\n'
         '解压完整 ZIP。Linux：`sh install.sh`；Windows：运行 `install.cmd`（或 PowerShell `.\\install.ps1`）。\n\n'
-        '需要 Codex CLI 和 Python 3.11+。默认创建独立 Python 环境并下载 PyQt5，'
+        '需要 Codex CLI 和 Python 3.11+。默认创建独立 Python 环境并下载 PyQt5 与 cryptography，'
         '完成后新建 Codex 聊天，输入“打开星序设置”。\n\n'
+        '安装后默认每天本机时间 00:00 自动生成任务日报。输入“打开星序日报定时设置”可改时间、停用或补跑；'
+        '安装时加 `--daily-time 23:00` 可指定时间，加 `--no-schedule` 可跳过定时任务注册。\n\n'
         '更新时运行同一命令，保留本机设置与数据。仅核心 MCP：加 `--headless`；'
-        '预览：加 `--dry-run`；已有 PyQt5：加 `--use-existing-python`。\n\n'
+        '预览：加 `--dry-run`；已有图形与 TLS 依赖：加 `--use-existing-python`。\n\n'
         '详细说明：[安装与使用](plugins/codex-orbit/README.md)。\n', encoding='utf-8')
     version = json.loads((plugin / 'plugin.json').read_text(encoding='utf-8'))['version']
     files = {str(path.relative_to(destination)): hashlib.sha256(path.read_bytes()).hexdigest()

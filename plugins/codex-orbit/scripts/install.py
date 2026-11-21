@@ -301,13 +301,13 @@ def prepare_python(base, target, *, headless=False, existing=False):
         if not python_supported(python):
             fail('插件专用 Python 版本过低。')
     if not headless:
-        has_qt = execute([python, '-c', "import importlib.util; print(int(importlib.util.find_spec('PyQt5') is not None))"]).strip() == '1'
+        has_qt = execute([python, '-c', "import importlib.util; print(int(importlib.util.find_spec('PyQt5') is not None and importlib.util.find_spec('cryptography') is not None))"]).strip() == '1'
         if not has_qt:
             if existing:
-                fail('指定解释器缺少 PyQt5，请先安装 requirements-ui.txt，或使用默认独立环境。')
-            info('安装原生卡片依赖 PyQt5（需要网络）…')
-            execute([python, '-m', 'pip', 'install', 'PyQt5>=5.15,<6'], timeout=600)
-        execute([python, '-c', 'from PyQt5 import QtWidgets, QtNetwork'])
+                fail('指定解释器缺少 PyQt5 或 cryptography，请先安装 requirements-ui.txt，或使用默认独立环境。')
+            info('安装原生卡片与 LAN TLS 依赖（需要网络）…')
+            execute([python, '-m', 'pip', 'install', 'PyQt5>=5.15,<6', 'cryptography>=41'], timeout=600)
+        execute([python, '-c', 'from PyQt5 import QtWidgets, QtNetwork; from cryptography import x509'])
     return str(python)
 
 
@@ -375,6 +375,8 @@ def restore_registration(codex, old):
 def install(args):
     root = find_root(args.source)
     version = validate_manifest(root)
+    if getattr(args,'daily_time',None) and not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',args.daily_time):
+        fail('日报时间需为 HH:MM，例如 00:00 或 23:30。')
     base = (shutil.which(args.python) or str(Path(args.python).expanduser().absolute())) if args.python else sys.executable
     if not python_supported(base):
         fail('需要 Python 3.11+；请使用 install.sh / install.ps1 自动选择，或指定 --python。')
@@ -398,6 +400,8 @@ def install(args):
         if codex:
             info('codex plugin marketplace add <分发目录> --json')
             info('codex plugin add orbit@sevenova --json')
+            if not getattr(args,'no_schedule',False):
+                info('安装后自动注册每日聊天日志收集：'+(getattr(args,'daily_time',None) or '00:00（已有设置保留）'))
         info('dry-run 完成，未修改任何文件。')
         return
     with install_lock(target):
@@ -440,6 +444,14 @@ def install(args):
                 if backup.exists():
                     shutil.rmtree(backup)
     info(f'安装完成：{version}；MCP 自检通过。' + ('已跳过 Codex 注册。' if not codex else 'Codex 已安装并启用。'))
+    if codex and not getattr(args,'no_schedule',False):
+        command=[python,plugin_directory(target)/'scripts/mcp.py','--install-schedule']
+        if getattr(args,'daily_time',None): command+=['--daily-time',args.daily_time]
+        try:
+            value=json.loads(execute(command))
+            info('日报定时任务已注册：每天 '+value['config']['time']+'（本机时间）；'+('已启用。' if value['config']['enabled'] else '保留原停用设置。'))
+        except (InstallError,ValueError,KeyError):
+            fail('插件文件已安装，但每日任务未注册成功。请在已登录的本机桌面打开「日报定时收集」重试；原日志保留。')
     info('新建 Codex 聊天，使用 $orbit-work；首次对 Codex 说“打开星序设置”。')
 
 
@@ -456,6 +468,8 @@ def main():
     parser.add_argument('--enable-plugins', action='store_true', help='仅兼容旧客户端：备份后启用 plugins 功能')
     parser.add_argument('--install-ui-deps', action='store_true', help=argparse.SUPPRESS)  # Compatibility: now the default.
     parser.add_argument('--no-codex', action='store_true', help='只准备分发与运行环境')
+    parser.add_argument('--daily-time', help='每日收集时间 HH:MM，首次默认 00:00，升级保留原设置')
+    parser.add_argument('--no-schedule', action='store_true', help='跳过系统定时任务注册（不改变已有任务）')
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
     try:

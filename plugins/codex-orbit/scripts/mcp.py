@@ -30,10 +30,42 @@ def main():
     parser.add_argument('--chat-card', help='打开任务聊天卡片计划')
     parser.add_argument('--settings', action='store_true', help='打开本机原生设置卡片')
     parser.add_argument('--status', action='store_true')
+    parser.add_argument('--lan', action='store_true', help='打开局域网日志与 Shared Store 卡片')
+    parser.add_argument('--lan-serve', action='store_true', help='运行已启用的本机日志节点')
+    parser.add_argument('--collect-daily', action='store_true', help='收集已到期的绑定聊天日报，补跑失败周期')
+    parser.add_argument('--install-schedule', action='store_true', help='安装或更新本机每日收集任务，默认 00:00')
+    parser.add_argument('--daily-time', help='本机时间 HH:MM')
+    parser.add_argument('--schedule-enable', action='store_true')
+    parser.add_argument('--schedule-disable', action='store_true')
+    parser.add_argument('--schedule', action='store_true', help='打开日报定时设置卡片')
     args = parser.parse_args()
     try:
         orbit = Orbit(args.data_dir, credential_directory=args.credentials_dir)
-        if args.chat_card:
+        if args.collect_daily:
+            import signal
+            import threading
+            from orbit_plugin.nightly import DailyCollector
+            cancel=threading.Event()
+            for sig in (signal.SIGTERM,signal.SIGINT): signal.signal(sig,lambda *_:cancel.set())
+            result=DailyCollector(orbit).collect(cancel=cancel)
+            print(json.dumps(result,ensure_ascii=False))
+            raise SystemExit(2 if result.get('pending') else 0)
+        elif args.install_schedule:
+            from orbit_plugin.scheduler import Scheduler
+            if args.schedule_enable and args.schedule_disable: parser.error('不能同时启用和停用')
+            enabled=False if args.schedule_disable else True if args.schedule_enable else None
+            value=Scheduler(orbit.directory).configure(args.daily_time,enabled)
+            print(json.dumps(value,ensure_ascii=False))
+        elif args.schedule:
+            from orbit_plugin.schedule_ui import run_card
+            raise SystemExit(run_card(orbit))
+        elif args.lan_serve:
+            from orbit_plugin.lan import run_node
+            raise SystemExit(run_node(orbit))
+        elif args.lan:
+            from orbit_plugin.lan_ui import run_card
+            raise SystemExit(run_card(orbit))
+        elif args.chat_card:
             from orbit_plugin.chat_card_ui import run_card
             raise SystemExit(run_card(orbit.directory, args.chat_card))
         elif args.settings:
@@ -54,11 +86,17 @@ def main():
             print(json.dumps(orbit.status(), ensure_ascii=False, indent=2))
         else:
             from orbit_plugin.server import serve
+            from orbit_plugin.lan import start_node
+            # Existing explicit opt-in persists across Codex sessions. Never enable sharing here.
+            try:
+                start_node(orbit)
+            except (OSError, ValueError):
+                pass
             orbit.auto_setup = True
             sys.stdin.reconfigure(encoding='utf-8')
             sys.stdout.reconfigure(encoding='utf-8')
             serve(orbit)
-    except OrbitError as exc:
+    except (OrbitError,ValueError,InterruptedError) as exc:
         parser.exit(2, str(exc) + '\n')
 
 

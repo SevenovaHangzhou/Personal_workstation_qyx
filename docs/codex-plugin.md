@@ -31,7 +31,7 @@
 
 默认目标沿用 `Sevenova/OrbitCodexPlugin/marketplace`，避免替换上层目录而丢失原配置。并发由进程文件锁排他；拒绝覆盖非 ORBIT 目录、源码、用户根目录及指定数据目录。ZIP 解压目录始终复制到稳定目标，删除下载目录不会破坏安装。安装器只继承目录配置，不读取/复制密钥或任务数据库。MCP 自检清除凭据环境变量，在隔离临时目录中运行，无 Linear 请求。
 
-本次不提供 DeepSeek 适配、后台定时调度、任务状态自动转换、附件上传或公共目录发布。旧 `orbit_mcp.py` 的大范围 `sync_once` 不暴露给 Codex 插件，结果回传只作用于准确的原 issue。
+不提供 DeepSeek 适配、附件上传或公共目录发布。旧 `orbit_mcp.py` 的大范围 `sync_once` 不暴露给 Codex 插件，结果回传只作用于准确的原 issue。定时摘要与已验证任务收尾分别使用下述独立流程。
 
 协议与格式参考：[OpenAI 插件打包](https://developers.openai.com/plugins/build/plugins)、[本地 MCP 启动规范](https://developers.openai.com/plugins/deploy/desktop-only)。
 
@@ -46,3 +46,31 @@
 `npm install -g <Git URL#ref>` 安装命令；`orbit-codex install` 检测可用 Python 3.11+（Windows 优先尝试 py -3），用参数数组启动原 Python 安装器，不拼 shell 命令。用户指定 `--python` 失败时明确报错，不偷偷切换解释器。安装退出码向外传播。npx 与全局安装都使用原安装器的固定目标，因此可安全清理 npm 包缓存；不向 npm 或 GitHub 传递 Linear 密钥。
 
 npm 模式仍要求本机具备 Python 和 Codex；它提供分发与命令入口，不将应用改为 Node 或网页。打包通过 `npm pack`，维护者可用 `npm test` 检查命令入口，用 Python 测试验证 tarball 清单和安装链路。官方依据：[npm bin 与文件清单](https://docs.npmjs.com/cli/v11/configuring-npm/package-json/)、[Git 来源安装](https://docs.npmjs.com/cli/v11/commands/npm-install/)、[npm exec / npx](https://docs.npmjs.com/cli/v11/commands/npm-exec/)。
+
+## LAN 工作日志（0.4.0）
+
+插件复用 `evaluation.mesh` 的 UDP 发现和只读授权协议，`evaluation.shared_store` 增加 TLS/TCP 直接文件流与不可变本地快照。`orbit_plugin.journals` 只从结果账本生成结构化文件；`orbit_plugin.lan` 在单独、可停用的后台进程提供服务，stdio MCP 重连不会重复占用端口。默认关闭，不以同网段或设备名称授予权限。
+
+`open_lan` 打开本机原生卡片，邀请只在卡片中处理；`lan_status` 返回发现与清单元数据，`collect_logs` 从已有授权联系人增量拉取，`read_shared_log` 读取当前已验证快照并返回历史收集时间。公网地址、指纹不符、任意路径、越界文件、未授权读取均拒绝。没有服务器端写文件或执行命令接口。
+
+[日志统计标准](../plugins/codex-orbit/日志统计标准.md)是统计与共享格式约定。结果草稿导出失败不丢失原 SQLite 记录，卡片重新导出可修复。旧评估端仍可读取授权结果记录和完整 Markdown 报告，无需新建一套管理员身份系统。
+
+## 每日定时收集（0.5.0）
+
+安装器在 Codex 注册成功后，通过稳定分发路径自动注册当前用户的系统任务。默认当地 00:00；升级保留时间与停用状态。Linux 使用 `systemd --user` + Persistent timer，Windows 使用 InteractiveToken 每日任务 + StartWhenAvailable，均不需要密码。`--no-codex` 或 `--no-schedule` 不注册。
+
+收集器用代码读取明确绑定的聊天用户／助手消息、筛选周期和去重，只把必要文本交给当前系统 Codex 做摘要。摘要子进程关闭插件、MCP、网络检索和执行工具，复用登录，不选择其他模型。原始聊天不写入 LAN 共享目录；摘要缓存是内容寻址的私有文件。
+
+`daily/state.json` 记录实际截止时间、未完成周期和窗口，调整 HH:MM 后从上次截止时间继续，不留下空档；任务／周期已成功结果不重复生成。`daily/reports/日期-HHMM/任务UUID` 保存 Markdown 与 JSON，LAN 根据当前共享任务清单导出。系统关机不能运行；用户会话恢复后补跑，Windows 仍需实机验证。
+
+调度依据：[systemd.timer](https://www.freedesktop.org/software/systemd/man/256/systemd.timer.html)、[Windows 每日任务 XML](https://learn.microsoft.com/en-us/windows/win32/taskschd/daily-trigger-example--xml-)。
+
+## 已验证任务收尾（0.6.0）
+
+`complete_task` 使用最新的不可变 `validated` 结果与内容哈希，要求完整范围已完成、验证证据非空、剩余／阻碍／下一步为空，并核对当前唯一会话绑定。通过 Linear API 分页读取所有子孙 issue（包括归档项），核对账号、团队、负责人、任务范围和父级自动关闭规则；团队只有一个完成状态时自动选择，否则由用户指定。
+
+写入前以结果 UUID 保存 `task_completions` 操作和远端快照，只修改 `stateId`。再独立读回 issue、归属、范围及子任务状态，成功后返回 `issue_verified` 与绑定会话的归档请求。网络结果不明确时保留 prepared，重试先读远端；已核验的 issue 若被重新打开则停止旧收尾，不覆盖用户调整。
+
+`orbit-work` 随后调用宿主 `set_thread_archived`，从 `list_archived_threads` 核对真实会话 ID 后调用 `confirm_chat_archived` 记录 archived。该回执代表宿主核验，不是插件自行访问 Codex 数据库。`list_completions` 仅返回历史元数据，不能直接取得归档令牌；继续收尾须先重新核对远端。缺少宿主能力时保留待归档，不声称成功。每日收集器不调用此流程。
+
+API 依据：[Linear issueUpdate](https://linear.app/developers/graphql)、[父子状态自动规则](https://linear.app/docs/parent-and-sub-issues)、[官方 GraphQL schema](https://github.com/linear/linear/blob/master/packages/sdk/src/schema.graphql)。会话使用当前 Codex 桌面宿主工具，不直接使用 app-server 的文件归档或私有数据库。

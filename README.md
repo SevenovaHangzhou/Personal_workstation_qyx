@@ -1,6 +1,6 @@
 # 星序 / ORBIT
 
-本分支维护 **Codex 插件 0.3.2**：[安装与使用](plugins/codex-orbit/README.md) · [版本说明](plugins/codex-orbit/CHANGELOG.md)。源码安装：Linux 运行 `sh plugins/codex-orbit/install.sh`，Windows 运行 `plugins\codex-orbit\install.cmd`。需要 Codex CLI 与 Python 3.11+。
+本分支维护 **Codex 插件 0.6.0**：[安装与使用](plugins/codex-orbit/README.md) · [版本说明](plugins/codex-orbit/CHANGELOG.md)。源码安装：Linux 运行 `sh plugins/codex-orbit/install.sh`，Windows 运行 `plugins\codex-orbit\install.cmd`。需要 Codex CLI 与 Python 3.11+。
 
 npm 安装并启用插件：
 
@@ -10,6 +10,10 @@ orbit-codex install
 ```
 
 需要 Node.js 18+、Git、Codex CLI、Python 3.11+。安装后新建 Codex 聊天，说“打开星序设置”。当前从 Git 分支安装，尚未发布 npm registry。[npx 与更多参数](plugins/codex-orbit/README.md#npm-安装linux--windows)
+
+新增：默认每天 00:00 自动整理绑定聊天日报，支持时间设置、授权 LAN 共享与离线副本。[日志统计标准](plugins/codex-orbit/日志统计标准.md) · [管理员使用](plugins/codex-orbit/README.md#局域网日志与管理员读取)。
+
+完整验证后自动完成对应 issue，读回核对后归档任务会话；未完成或有阻碍时保留。[任务收尾](plugins/codex-orbit/README.md#完成任务并归档会话)。
 
 原生桌面工作助手：管理工作、Demo 和日常任务，关联 Codex 与 Linear，记录日报、周报和 Git 留存。
 
