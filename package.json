@@ -1,6 +1,6 @@
 {
   "name": "@sevenova/orbit-codex",
-  "version": "0.6.0",
+  "version": "0.6.3",
   "private": true,
   "description": "ORBIT Codex 插件安装器：Linear 任务、项目聊天与开发结果回传",
   "license": "UNLICENSED",
@@ -58,7 +58,13 @@
     "qt_runtime.py",
     "scripts/build_codex_plugin.py",
     "task_plan.py",
-    "windows_credentials.py"
+    "windows_credentials.py",
+    "plugins/codex-orbit/skills/orbit-triage/SKILL.md",
+    "plugins/codex-orbit/skills/orbit-triage/agents/openai.yaml",
+    "plugins/codex-orbit/skills/orbit-triage/references/inventory.md",
+    "plugins/codex-orbit/skills/orbit-triage/scripts/issue_inventory.py",
+    "plugins/codex-orbit/orbit_plugin/codex_schedule.py",
+    "plugins/codex-orbit/skills/orbit-setup/references/daily-automation.md"
   ],
   "scripts": {
     "test": "node tests/test_codex_npm.cjs"

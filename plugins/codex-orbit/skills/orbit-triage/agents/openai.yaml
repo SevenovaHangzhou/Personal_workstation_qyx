@@ -1,0 +1,4 @@
+interface:
+  display_name: "星序任务盘点与聊天导航"
+  short_description: "统计未完成 issue，按依赖与进展排序，并找到可继续的聊天"
+  default_prompt: "使用 $orbit-triage 统计我的未完成 issue，安排逐个解决的顺序，并告诉我每项去哪个聊天继续。"

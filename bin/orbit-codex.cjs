@@ -25,7 +25,8 @@ function help() {
   --install-dir PATH        专用 marketplace 目录
   --no-codex                只准备插件分发，不注册 Codex 和定时任务
   --daily-time HH:MM         每日收集时间，首次默认 00:00
-  --no-schedule             跳过系统定时任务注册
+  --no-schedule             关闭安装后自动创建日报任务
+  --schedule-backend MODE    codex（默认）或 system；Codex 加载插件后自动创建
 
 npm 安装只提供本命令；运行 install 才配置 Codex 和 Python 环境。
 升级：先更新 npm 包，再运行 orbit-codex install。

@@ -33,6 +33,94 @@ class SchedulerTests(unittest.TestCase):
             platform='linux',config_home=self.root/'config',execute=lambda args:self.calls.append(args) or 'active\n')
         self.now=datetime(2026,11,21,18).astimezone()
 
+    def test_native_prepare_does_not_create_os_job_and_reuses_request(self):
+        from orbit_plugin.codex_schedule import prepare
+        first=prepare(self.scheduler, now=self.now)
+        self.assertEqual(first,prepare(self.scheduler,now=self.now))
+        self.assertEqual(self.calls,[])
+        self.assertFalse(self.scheduler.registration_path.exists())
+        self.assertEqual(first['config']['time'],'00:00')
+        self.assertEqual(first['command'][-2:],['--data-dir',str(self.scheduler.directory)])
+
+    def test_native_confirm_requires_receipt_and_disables_old_system_job_once(self):
+        from orbit_plugin.codex_schedule import prepare,confirm
+        self.scheduler.configure(now=self.now)
+        request=prepare(self.scheduler,now=self.now)
+        before=self.scheduler.registration()
+        with self.assertRaises(ScheduleError):confirm(self.scheduler,request['token'],'native-id',False)
+        with self.assertRaises(ScheduleError):confirm(self.scheduler,'wrong','native-id',True)
+        self.assertEqual(self.scheduler.registration(),before)
+        result=confirm(self.scheduler,request['token'],'native-id',True)
+        self.assertEqual(result['registration']['backend'],'codex-automation')
+        self.assertTrue(result['config']['enabled'])
+        calls=list(self.calls)
+        confirm(self.scheduler,request['token'],'native-id',True)
+        self.assertEqual(self.calls,calls)
+        self.assertEqual(prepare(self.scheduler,now=self.now)['automation_id'],'native-id')
+        with self.assertRaises(ScheduleError):self.scheduler.configure(now=self.now)
+
+    def test_native_failed_migration_keeps_old_job_and_same_request_is_retryable(self):
+        from orbit_plugin.codex_schedule import prepare,confirm
+        self.scheduler.configure(now=self.now)
+        request=prepare(self.scheduler,now=self.now)
+        old_config=self.scheduler.config();old_registration=self.scheduler.registration()
+        execute=self.scheduler.execute
+        self.scheduler.execute=Mock(side_effect=ScheduleError('unavailable'))
+        with self.assertRaises(ScheduleError):confirm(self.scheduler,request['token'],'native-id',True)
+        self.assertEqual(self.scheduler.config(),old_config)
+        self.assertEqual(self.scheduler.registration(),old_registration)
+        self.scheduler.execute=execute
+        confirm(self.scheduler,request['token'],'native-id',True)
+        self.assertEqual(self.scheduler.registration()['automation_id'],'native-id')
+
+    def test_native_migration_preserves_initial_pause_request_but_host_owns_resume(self):
+        from orbit_plugin.codex_schedule import prepare,confirm
+        self.scheduler.configure(enabled=False,now=self.now)
+        request=prepare(self.scheduler,now=self.now)
+        self.assertFalse(request['config']['enabled'])
+        result=confirm(self.scheduler,request['token'],'paused-native-id',True)
+        self.assertTrue(result['config']['enabled'])
+
+    def test_bootstrap_is_read_only_and_stops_after_confirmation(self):
+        from orbit_plugin.codex_schedule import bootstrap_instructions, prepare, confirm
+        self.assertIn('prepare_daily_automation', bootstrap_instructions(self.scheduler.directory))
+        self.assertFalse(self.scheduler.root.exists())
+        request=prepare(self.scheduler, now=self.now)
+        self.assertIn('automation_update', bootstrap_instructions(self.scheduler.directory))
+        confirm(self.scheduler, request['token'], 'native-id', True)
+        self.assertEqual(bootstrap_instructions(self.scheduler.directory), '')
+
+    def test_bootstrap_respects_opt_out_system_scheduler_and_unreadable_registration(self):
+        from orbit_plugin.codex_schedule import bootstrap_instructions
+        self.assertEqual(bootstrap_instructions(self.scheduler.directory, False), '')
+        self.scheduler.configure(enabled=False, now=self.now)
+        self.assertEqual(bootstrap_instructions(self.scheduler.directory), '')
+        self.scheduler.registration_path.write_text('{broken')
+        self.assertNotIn('prepare_daily_automation', bootstrap_instructions(self.scheduler.directory))
+        self.assertIn('无法读取', bootstrap_instructions(self.scheduler.directory))
+
+    def test_first_mcp_launch_preserves_installer_time_boundary_and_stable_command(self):
+        from orbit_plugin.codex_schedule import prepare
+        first=prepare(self.scheduler, '23:30', now=self.now)
+        # The MCP instance may run from Codex's versioned cache, unlike the installer.
+        runtime=Scheduler(self.scheduler.directory)
+        result=prepare(runtime, now=self.now+timedelta(days=2), owner='session-a')
+        self.assertEqual(result['config'], first['config'])
+        self.assertEqual(result['command'], first['command'])
+
+    def test_concurrent_bootstrap_claims_and_recovery_do_not_reuse_stale_tokens(self):
+        from orbit_plugin.codex_schedule import prepare, confirm
+        first=prepare(self.scheduler, now=self.now, owner='session-a')
+        self.assertEqual(first, prepare(self.scheduler, now=self.now, owner='session-a'))
+        other=prepare(self.scheduler, now=self.now, owner='session-b')
+        self.assertEqual(other['state'], 'waiting')
+        self.assertNotIn('token', other)
+        later=prepare(self.scheduler, now=self.now+timedelta(minutes=16), owner='session-b')
+        self.assertNotEqual(first['token'], later['token'])
+        with self.assertRaises(ScheduleError):confirm(self.scheduler, first['token'], 'native-id', True)
+        confirm(self.scheduler, later['token'], 'native-id', True)
+        self.assertEqual(prepare(self.scheduler, now=self.now, owner='session-a')['automation_id'], 'native-id')
+
     def test_default_midnight_stable_job_update_and_disable(self):
         saved=self.scheduler.configure(now=self.now)
         self.assertEqual(saved['config']['time'],'00:00')

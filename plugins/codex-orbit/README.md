@@ -1,8 +1,8 @@
-# 星序 / ORBIT · Codex 插件 0.6.0
+# 星序 / ORBIT · Codex 插件 0.6.3
 
 Linear My Issues → Codex 专用聊天开发 → 结果草稿 → 确认后回传原 issue。
 
-包含设置卡片、任务聊天卡片和 23 个 MCP 工具。无需启动星序桌面版。支持 Linux / Windows，需先安装支持插件的 Codex CLI 和 Python 3.11+。
+包含设置卡片、任务聊天卡片和 25 个 MCP 工具。无需启动星序桌面版。支持 Linux / Windows，需先安装支持插件的 Codex CLI 和 Python 3.11+。
 
 [本次更新说明](CHANGELOG.md)
 
@@ -73,7 +73,8 @@ sh install.sh
 | `--install-dir PATH` | 指定专用 marketplace 目录，需为空或已有 ORBIT 分发 |
 | `--no-codex` | 仅准备安装文件与环境，稍后在 Codex 中安装 |
 | `--daily-time HH:MM` | 指定每日收集时间，首次默认 00:00，升级保留已有设置 |
-| `--no-schedule` | 跳过系统定时任务注册，不改变已有任务 |
+| `--no-schedule` | 关闭安装后自动创建，升级保留选择；不改变已有任务 |
+| `--schedule-backend codex/system` | 默认在 Codex 加载插件后自动创建日报任务；system 使用独立系统计时器；显式 codex 恢复自动创建 |
 
 默认分发目录是用户数据目录内的 `Sevenova/OrbitCodexPlugin/marketplace`，独立环境在相邻的 `marketplace-runtime`。插件任务和密钥另存于 Linux `~/.local/share/Sevenova/OrbitCodex` 或 Windows `%LOCALAPPDATA%\Sevenova\OrbitCodex`。升级不迁移这些数据。
 
@@ -91,6 +92,8 @@ codex plugin add orbit@sevenova
 官方还支持 Git 仓库来源。当前源码分支的插件依赖项目共享模块，**需要先运行上述安装脚本打包**，不能直接把未打包源码当作可运行的 marketplace。插件尚未发布到公共插件目录。[官方规范](https://developers.openai.com/plugins/build/plugins)
 
 ## 使用
+
+任务盘点可使用 `$orbit-triage`，或说“统计我的未完成 issue，按解决顺序排序，并告诉我每项去哪个聊天”。技能读取当前任务、依赖和聊天证据，区分已开发内容、待验收和状态未同步事项；只读盘点不会领取任务、改绑定、改优先级或关闭 issue。仅问聊天时返回可点击的对应清单。
 
 新建 Codex 聊天，使用 `$orbit-work` 或直接说：
 
@@ -117,15 +120,15 @@ python3 /absolute/path/to/marketplace/plugins/codex-orbit/scripts/mcp.py --setup
 
 ## 自动日报
 
-安装器完成 Codex 安装后，自动注册每天 **00:00（本机时间，午夜 12 点）** 的日志收集任务。Linux 使用用户级 systemd timer，Windows 使用当前用户的任务计划程序；无需保持 Codex 窗口开启。升级保留已设置的时间和停用状态，同一数据空间只有一个定时任务。
+安装器默认准备每天 **00:00（本机时间）** 的日报配置。安装后，Codex 桌面下一次加载星序时通过 MCP 初始化指令自动创建“星序 · 每日更新日报”，无需再输入设置口令或先填写 Linear 密钥。纯命令行安装不等于宿主任务已创建：没有桌面宿主工具时保留待创建状态，直到在 Codex 桌面加载插件。多个会话同时加载时仅一个会话领取创建流程；已确认后停止自动创建，用户暂停或删除的任务不会被自动重建。升级复用原任务 ID，保留用户在 Codex 中调整的时间和暂停状态；确认原生任务后再停用旧系统计时器。
 
 只读取插件任务明确绑定的 Codex 聊天，并整理该周期的结果、测试证据与阻碍。收集、分组、去重与文件生成由代码完成，文本摘要通过系统当前 Codex 配置执行；不更改登录或模型，不上传原始聊天到 LAN，不自动评论或修改 Linear。
 
-说“打开星序日报定时设置”，或在连接设置中点击「日报定时收集」，可更改时间、停用或检查补跑。安装时也可指定 `orbit-codex install --daily-time 23:30`。关机时无法执行；恢复已登录的用户会话后由系统补触发，收集器补齐漏跑日期，失败摘要下一次再试。Windows 首版只在当前用户已登录时运行，不收集登录密码。
+说“设置星序每日日报”可补建或核对 Codex 自动化。时间和启停在 Codex 自动化列表管理；“日报定时收集”卡片显示归属并支持手动补跑。安装时可用 `--daily-time 23:30` 指定初始时间。收集器会补齐漏跑周期，摘要失败保留待重试。CLI 用户明确需要独立系统调度时加 `--schedule-backend system`，该模式不显示在 Codex 自动化列表。
 
 日报位于插件数据目录 `daily/reports/周期结束日期-HHMM/任务UUID.md` 与 `.json`，保存实际时间区间、消息数、摘要、证据和待处理原因。默认 00:00 的日报归入刚结束的一天。没有绑定、记录缺失和没有新消息分别标记，不能当作零工作量。日报按任务拆分，LAN 仅公开当前勾选任务的摘要文件。
 
-`--no-schedule` 跳过系统任务注册，`--no-codex` 仅准备分发也不注册；仅执行 npm 安装尚未运行 `orbit-codex install` 时不会修改系统。卸载 Codex 插件前请先在卡片停用定时任务。
+`--no-schedule` 跳过日报设置，`--no-codex` 仅准备分发也不注册；仅执行 npm 安装尚未运行 `orbit-codex install` 时不会修改系统。卸载 Codex 插件前请先在 Codex 中暂停日报自动化；系统调度模式则在卡片停用。
 
 ## 局域网日志与管理员读取
 
@@ -149,3 +152,5 @@ codex plugin marketplace remove sevenova
 卸载保留本机分发、数据和密钥。安装失败先检查 Codex / Python 版本与网络，再运行同一命令。安装成功后看不到工具时，新建 Codex 会话并运行 `codex plugin list --marketplace sevenova --json` 核对版本与启用状态。Windows 的源码和入口已覆盖，实际 Windows 桌面运行仍需在 Windows 验证。
 
 从源码构建 ZIP：`python3 scripts/build_codex_plugin.py --output /absolute/new/output`，输出完整 marketplace、根目录安装入口、ZIP 和 SHA-256。
+
+安装后自动创建使用 [MCP 初始化指令](https://developers.openai.com/plugins/build/mcp-server)；仍由 Codex 宿主工具创建并读回自动化，不直接修改宿主存储。

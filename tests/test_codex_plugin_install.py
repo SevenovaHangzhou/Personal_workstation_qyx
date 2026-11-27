@@ -168,14 +168,14 @@ class CodexPluginInstallTests(unittest.TestCase):
                 self.module.prepare_python(sys.executable,self.dist,existing=True)
         self.assertEqual((self.dist/'plugins/codex-orbit/mcp.json').read_bytes(),original)
 
-    def test_successful_codex_install_registers_schedule_using_the_stable_entry(self):
+    def test_successful_codex_install_prepares_native_schedule_using_the_stable_entry(self):
         args=argparse.Namespace(source=str(ROOT),python=sys.executable,install_dir=str(self.dist),headless=True,
             use_existing_python=False,data_dir=str(self.root/'data'),credentials_from=None,no_codex=False,
             codex='codex',enable_plugins=False,dry_run=False,daily_time='23:30',no_schedule=False)
         execute=self.module.execute
         registered=[]
         def spy(command,**kwargs):
-            if '--install-schedule' in command:
+            if '--prepare-codex-schedule' in command:
                 registered.append([str(value) for value in command])
                 return json.dumps(dict(config=dict(time='23:30',enabled=True)))
             return execute(command,**kwargs)
@@ -184,13 +184,31 @@ class CodexPluginInstallTests(unittest.TestCase):
              mock.patch.object(self.module,'install_codex'),mock.patch.object(self.module,'execute',side_effect=spy):
             self.module.install(args)
         self.assertEqual(registered,[[sys.executable,str(self.dist/'plugins/codex-orbit/scripts/mcp.py'),
-                                     '--install-schedule','--daily-time','23:30']])
+                                     '--prepare-codex-schedule','--daily-time','23:30']])
         self.assertFalse((self.root/'data').exists())  # Installation never collects real chats.
 
     def test_invalid_daily_time_is_rejected_before_installation(self):
         result=self.install('--daily-time','24:00')
         self.assertEqual(result.returncode,2)
         self.assertFalse(self.dist.exists())
+
+    def test_no_schedule_disables_bootstrap_and_upgrade_preserves_choice(self):
+        for options in (('--no-schedule',), ()):
+            result=self.install(*options)
+            self.assertEqual(result.returncode, 0, result.stderr+result.stdout)
+            settings=self.dist/'plugins/codex-orbit/settings.json'
+            self.assertFalse(json.loads(settings.read_text())['auto_daily_automation'])
+            env=dict(os.environ, ORBIT_DATA_DIR=str(self.root/'data'))
+            process=subprocess.run([sys.executable, str(self.dist/'plugins/codex-orbit/scripts/mcp.py')],
+                input=json.dumps(dict(jsonrpc='2.0',id=1,method='initialize',params={}))+'\n',
+                capture_output=True,text=True,env=env,timeout=10)
+            self.assertEqual(process.returncode, 0, process.stderr)
+            self.assertNotIn('prepare_daily_automation', json.loads(process.stdout)['result']['instructions'])
+            self.assertFalse((self.root/'data').exists())
+
+        result=self.install('--schedule-backend', 'codex')
+        self.assertEqual(result.returncode, 0, result.stderr+result.stdout)
+        self.assertTrue(json.loads(settings.read_text())['auto_daily_automation'])
 
     def test_plugins_flag_opt_in_preserves_other_toml(self):
         original='model = "test"\n[features]\nweb = true\n[other]\nvalue = 1\n'

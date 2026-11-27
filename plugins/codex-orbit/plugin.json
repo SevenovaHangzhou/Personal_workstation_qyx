@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "orbit",
-  "version": "0.6.0",
-  "description": "将 Linear My Issues 交给本地 Codex，并将有证据的开发结果回传到原 issue。",
+  "version": "0.6.3",
+  "description": "统计和排序 Linear My Issues，定位可继续的 Codex 聊天，并支持任务开发与结果回传。",
   "author": {
     "name": "Sevenova"
   },
@@ -18,7 +18,7 @@
       "onboardingSkill": "./skills/orbit-setup/SKILL.md",
       "interface": {
         "displayName": "星序 / ORBIT",
-        "shortDescription": "Linear 任务下发与开发结果回传",
+        "shortDescription": "Linear 任务盘点、聊天导航与自动日报",
         "developerName": "Sevenova",
         "category": "Productivity",
         "capabilities": [
@@ -27,7 +27,8 @@
         ],
         "defaultPrompt": [
           "拉取我的 Linear 任务",
-          "将本次开发结果整理并回传到当前 issue"
+          "将本次开发结果整理并回传到当前 issue",
+          "统计我的未完成 issue，按解决顺序排序并找到对应聊天"
         ]
       }
     }

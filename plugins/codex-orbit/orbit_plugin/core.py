@@ -116,6 +116,18 @@ class Orbit:
         from .scheduler import open_card
         return open_card(self)
 
+    def prepare_daily_automation(self):
+        from .scheduler import Scheduler
+        from .codex_schedule import prepare
+        if not hasattr(self, '_automation_owner'):
+            self._automation_owner = str(uuid.uuid4())
+        return prepare(Scheduler(self.directory), owner=self._automation_owner)
+
+    def confirm_daily_automation(self, token, automation_id, host_verified):
+        from .scheduler import Scheduler
+        from .codex_schedule import confirm
+        return confirm(Scheduler(self.directory), token, automation_id, host_verified)
+
     def lan_status(self):
         from .lan import status
         return status(self)

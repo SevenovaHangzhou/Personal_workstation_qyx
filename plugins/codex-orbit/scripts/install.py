@@ -278,8 +278,9 @@ def previous_settings(target, old_source, root):
         path = plugin_directory(directory) / 'settings.json'
         if path.is_file():
             settings = read_json(path)
-            if not isinstance(settings, dict) or set(settings) - {'data_dir', 'credentials_dir'} or any(
-                    not isinstance(v, str) or not Path(v).is_absolute() for v in settings.values()):
+            if (not isinstance(settings, dict) or set(settings) - {'data_dir', 'credentials_dir', 'auto_daily_automation'}
+                    or any(not isinstance(v, str) or not Path(v).is_absolute() for k, v in settings.items() if k != 'auto_daily_automation')
+                    or type(settings.get('auto_daily_automation', True)) is not bool):
                 fail('现有 settings.json 无效；为保留原配置，未执行升级。')
             return settings
     return {}
@@ -401,7 +402,7 @@ def install(args):
             info('codex plugin marketplace add <分发目录> --json')
             info('codex plugin add orbit@sevenova --json')
             if not getattr(args,'no_schedule',False):
-                info('安装后自动注册每日聊天日志收集：'+(getattr(args,'daily_time',None) or '00:00（已有设置保留）'))
+                info('安装后准备日报调度：'+(getattr(args,'schedule_backend',None) or 'codex')+' · '+(getattr(args,'daily_time',None) or '00:00（已有设置保留）'))
         info('dry-run 完成，未修改任何文件。')
         return
     with install_lock(target):
@@ -409,6 +410,11 @@ def install(args):
         old = configured_marketplaces(codex).get(MARKETPLACE) if codex else None
         validate_target(root, target, protected)
         settings = previous_settings(target, source_of(old) if old else None, root)
+        settings.setdefault('auto_daily_automation', True)
+        if getattr(args, 'no_schedule', False) or getattr(args, 'schedule_backend', 'codex') == 'system':
+            settings['auto_daily_automation'] = False
+        elif getattr(args, 'schedule_backend', None) == 'codex':
+            settings['auto_daily_automation'] = True
         with tempfile.TemporaryDirectory(prefix='orbit-prepare-', dir=target.parent) as temporary:
             staged = Path(temporary) / 'marketplace'
             prepare_distribution(root, staged)
@@ -445,14 +451,26 @@ def install(args):
                     shutil.rmtree(backup)
     info(f'安装完成：{version}；MCP 自检通过。' + ('已跳过 Codex 注册。' if not codex else 'Codex 已安装并启用。'))
     if codex and not getattr(args,'no_schedule',False):
-        command=[python,plugin_directory(target)/'scripts/mcp.py','--install-schedule']
+        system_schedule=getattr(args,'schedule_backend','codex')=='system'
+        command=[python,plugin_directory(target)/'scripts/mcp.py','--install-schedule' if system_schedule else '--prepare-codex-schedule']
         if getattr(args,'daily_time',None): command+=['--daily-time',args.daily_time]
         try:
             value=json.loads(execute(command))
-            info('日报定时任务已注册：每天 '+value['config']['time']+'（本机时间）；'+('已启用。' if value['config']['enabled'] else '保留原停用设置。'))
+            if system_schedule:
+                info('系统日报任务已注册：每天 '+value['config']['time']+'（本机时间）；不显示在 Codex 自动化列表。')
+            elif value.get('state') == 'waiting':
+                info('另一个 Codex 会话正在完成日报任务创建；本次安装不重复创建。')
+            elif not settings['auto_daily_automation']:
+                info('已保留关闭自动创建日报任务的设置；已有任务不受影响。')
+            elif value.get('automation_id'):
+                info('已复用 Codex 日报任务：'+value['automation_id']+'；时间与启停以 Codex 中的设置为准。')
+            else:
+                info('Codex 日报自动化配置已准备：每天 '+value['config']['time']+'（本机时间）。')
+                info('下一次在 Codex 桌面加载星序时，会自动查重并创建每日更新日报任务，无需另行输入设置指令。')
+                info('当前仅完成安装准备；宿主创建并读回成功后才标记为已创建。')
         except (InstallError,ValueError,KeyError):
-            fail('插件文件已安装，但每日任务未注册成功。请在已登录的本机桌面打开「日报定时收集」重试；原日志保留。')
-    info('新建 Codex 聊天，使用 $orbit-work；首次对 Codex 说“打开星序设置”。')
+            fail('插件文件已安装，但日报设置未完成。请在 Codex 中运行星序首次设置；原日志保留。')
+    info('在 Codex 中继续聊天即可加载插件；Linear 连接尚未配置时可说“打开星序设置”。')
 
 
 def main():
@@ -469,7 +487,8 @@ def main():
     parser.add_argument('--install-ui-deps', action='store_true', help=argparse.SUPPRESS)  # Compatibility: now the default.
     parser.add_argument('--no-codex', action='store_true', help='只准备分发与运行环境')
     parser.add_argument('--daily-time', help='每日收集时间 HH:MM，首次默认 00:00，升级保留原设置')
-    parser.add_argument('--no-schedule', action='store_true', help='跳过系统定时任务注册（不改变已有任务）')
+    parser.add_argument('--no-schedule', action='store_true', help='关闭安装后自动创建日报任务（不改变已有任务）')
+    parser.add_argument('--schedule-backend', choices=['codex','system'], help='默认在 Codex 加载插件后自动创建日报任务；显式 codex 恢复自动创建，system 为独立系统任务')
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
     try:

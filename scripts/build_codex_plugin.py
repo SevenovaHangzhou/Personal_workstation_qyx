@@ -54,9 +54,9 @@ def build(destination):
         '# 星序 / ORBIT Codex 插件\n\n'
         '解压完整 ZIP。Linux：`sh install.sh`；Windows：运行 `install.cmd`（或 PowerShell `.\\install.ps1`）。\n\n'
         '需要 Codex CLI 和 Python 3.11+。默认创建独立 Python 环境并下载 PyQt5 与 cryptography，'
-        '完成后新建 Codex 聊天，输入“打开星序设置”。\n\n'
-        '安装后默认每天本机时间 00:00 自动生成任务日报。输入“打开星序日报定时设置”可改时间、停用或补跑；'
-        '安装时加 `--daily-time 23:00` 可指定时间，加 `--no-schedule` 可跳过定时任务注册。\n\n'
+        '完成后在 Codex 桌面继续聊天，插件会自动完成日报任务创建；Linear 连接可通过“打开星序设置”配置。\n\n'
+        'Codex 加载插件并确认创建后，默认每天本机时间 00:00 更新任务日报。时间与启停在 Codex 自动化中管理，星序卡片支持补跑；'
+        '安装时加 `--daily-time 23:00` 可指定时间，加 `--no-schedule` 可关闭安装后自动创建。\n\n'
         '更新时运行同一命令，保留本机设置与数据。仅核心 MCP：加 `--headless`；'
         '预览：加 `--dry-run`；已有图形与 TLS 依赖：加 `--use-existing-python`。\n\n'
         '详细说明：[安装与使用](plugins/codex-orbit/README.md)。\n', encoding='utf-8')

@@ -41,7 +41,7 @@ class ScheduleCard(QDialog):
         self.enabled=QCheckBox('启用每日自动收集');layout.addWidget(self.enabled)
         row=QHBoxLayout();row.addWidget(label('每天 · 本机时间'))
         self.at=QTimeEdit();self.at.setDisplayFormat('HH:mm');row.addWidget(self.at);row.addStretch();layout.addLayout(row)
-        layout.addWidget(label('默认 00:00（午夜 12 点）。关闭 Codex 后仍由系统调度；电脑关机时无法运行，恢复登录后可补跑。摘要沿用系统当前 Codex 配置。','muted',True))
+        self.backend_notice=label('','muted',True);layout.addWidget(self.backend_notice)
         self.save=QPushButton('保存定时设置');self.save.setObjectName('primary');self.save.clicked.connect(self.apply);layout.addWidget(self.save)
         self.run_button=QPushButton('立即检查并补跑');self.run_button.clicked.connect(self.collect);layout.addWidget(self.run_button)
         self.progress=QProgressBar();self.progress.setRange(0,0);self.progress.hide();layout.addWidget(self.progress)
@@ -52,7 +52,16 @@ class ScheduleCard(QDialog):
 
     def refresh(self):
         value=self.scheduler.status();reg=value['registration'];config=value['config']
+        native=reg.get('backend')=='codex-automation'
+        pending=(self.scheduler.root/'codex-request.json').exists() and not native
+        self.save.setEnabled(not native and not pending)
+        self.at.setEnabled(not native and not pending);self.enabled.setEnabled(not native and not pending)
+        self.backend_notice.setText('在 Codex 自动化列表修改时间和启停；这里仅检查日报或补跑。' if native else
+            'Codex 桌面加载星序后会自动完成日报任务创建。' if pending else
+            '独立系统调度：默认 00:00，关闭 Codex 后仍可运行；恢复登录后补跑。')
         text=('每天 '+config['time']+' · '+('已启用' if config['enabled'] else '已停用')) if reg.get('registered') else '尚未注册系统定时任务 · 保存后生效'
+        if native: text='已关联 Codex 自动化 · 时间和启停以 Codex 列表为准'
+        elif pending: text='等待 Codex 完成日报任务创建'+(' · 原系统任务暂时保留' if reg.get('registered') else '')
         if value['last_run']:
             text+='\n上次收集：'+value['last_run'].get('updated_at','')+' · 待补跑 '+str(len(value['last_run'].get('pending',[])))+' 天'
         self.status.setText(text)

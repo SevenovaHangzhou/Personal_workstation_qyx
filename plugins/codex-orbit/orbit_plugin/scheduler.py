@@ -118,6 +118,8 @@ class Scheduler:
             return self._configure(at,enabled,now)
 
     def _configure(self, at, enabled, now):
+        if self.registration().get('backend') == 'codex-automation':
+            raise ScheduleError('此日报由 Codex 自动化管理，请在 Codex 中修改时间或暂停；不会另建系统任务。')
         old = self.config()
         value = dict(old, time=clock(at) if at is not None else old['time'],
                      enabled=enabled if enabled is not None else old['enabled'])

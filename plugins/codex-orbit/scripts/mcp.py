@@ -20,7 +20,9 @@ def main():
     settings_path = ROOT / 'settings.json'
     try:
         settings = json.loads(settings_path.read_text(encoding='utf-8')) if settings_path.exists() else {}
-        if type(settings) is not dict or set(settings) - {'data_dir', 'credentials_dir'} or any(not isinstance(v, str) for v in settings.values()):
+        if (type(settings) is not dict or set(settings) - {'data_dir', 'credentials_dir', 'auto_daily_automation'}
+                or any(not isinstance(v, str) for k, v in settings.items() if k != 'auto_daily_automation')
+                or type(settings.get('auto_daily_automation', True)) is not bool):
             raise ValueError()
     except (OSError, ValueError, UnicodeError):
         parser.error('本地 settings.json 无效，请重新配置；未修改原数据。')
@@ -34,6 +36,9 @@ def main():
     parser.add_argument('--lan-serve', action='store_true', help='运行已启用的本机日志节点')
     parser.add_argument('--collect-daily', action='store_true', help='收集已到期的绑定聊天日报，补跑失败周期')
     parser.add_argument('--install-schedule', action='store_true', help='安装或更新本机每日收集任务，默认 00:00')
+    parser.add_argument('--prepare-codex-schedule', action='store_true', help='准备 Codex 原生日报自动化，交由宿主创建')
+    parser.add_argument('--confirm-codex-schedule', help='确认已由 Codex 宿主读回的自动化 ID')
+    parser.add_argument('--schedule-token', help='prepare 返回的请求 token')
     parser.add_argument('--daily-time', help='本机时间 HH:MM')
     parser.add_argument('--schedule-enable', action='store_true')
     parser.add_argument('--schedule-disable', action='store_true')
@@ -41,6 +46,7 @@ def main():
     args = parser.parse_args()
     try:
         orbit = Orbit(args.data_dir, credential_directory=args.credentials_dir)
+        orbit.auto_daily_automation = settings.get('auto_daily_automation', True)
         if args.collect_daily:
             import signal
             import threading
@@ -50,6 +56,12 @@ def main():
             result=DailyCollector(orbit).collect(cancel=cancel)
             print(json.dumps(result,ensure_ascii=False))
             raise SystemExit(2 if result.get('pending') else 0)
+        elif args.prepare_codex_schedule or args.confirm_codex_schedule:
+            from orbit_plugin.scheduler import Scheduler
+            from orbit_plugin.codex_schedule import prepare, confirm
+            scheduler=Scheduler(orbit.directory)
+            value=confirm(scheduler,args.schedule_token,args.confirm_codex_schedule,True) if args.confirm_codex_schedule else prepare(scheduler,args.daily_time)
+            print(json.dumps(value,ensure_ascii=False))
         elif args.install_schedule:
             from orbit_plugin.scheduler import Scheduler
             if args.schedule_enable and args.schedule_disable: parser.error('不能同时启用和停用')
