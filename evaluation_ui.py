@@ -183,16 +183,19 @@ class EvaluationDialog(QDialog):
     def __init__(self, owner):
         super().__init__(owner)
         self.client, self.tasks = owner.runtime.evaluation, owner.tasks
-        self.setWindowTitle('日志评估 · 星序')
+        self.setWindowTitle('团队进度 · 星序管理员')
         self.resize(1160, 790)
         self.setMinimumSize(850, 580)
         self.snapshot_data = {}
         self.cached = {}
         self.initialized = False
+        self.question_window = None
         layout = QVBoxLayout(self)
-        layout.addWidget(note('员工授权共享 · 日志副本保存在本机 · Linear 只读'))
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs, 1)
+        self.resources_tabs = QTabWidget()
+        self.settings_tabs = QTabWidget()
+        self.pages = {}
         self.build_share()
         self.build_peers()
         self.build_query()
@@ -200,10 +203,16 @@ class EvaluationDialog(QDialog):
         self.build_reports()
         from evaluation_report_ui import CompleteReportsPanel
         self.complete_report_panel = CompleteReportsPanel(self)
-        self.tabs.addTab(self.complete_report_panel, '完整日报与周报')
+        self.resources_tabs.insertTab(0, self.complete_report_panel, '日报与周报')
         from evaluation_roster_ui import RosterPanel
         self.roster_panel = RosterPanel(self)
-        self.tabs.addTab(self.roster_panel, '员工与设备')
+        self.settings_tabs.insertTab(0, self.roster_panel, '员工名册')
+        self.settings_tabs.setCurrentIndex(0)
+        from evaluation_overview_ui import OverviewPanel
+        self.overview_panel = OverviewPanel(self)
+        self.tabs.addTab(self.overview_panel, '工作概览')
+        self.tabs.addTab(self.resources_tabs, '日志与资料')
+        self.tabs.addTab(self.settings_tabs, '人员与连接')
         self.status = note('')
         row = QHBoxLayout()
         row.addWidget(self.status, 1)
@@ -214,17 +223,51 @@ class EvaluationDialog(QDialog):
         self.timer.timeout.connect(self.refresh)
         self.refresh()
 
-    def page(self, title, scroll=False):
+    def page(self, title, scroll=False, settings=False):
         host = QWidget()
         layout = QVBoxLayout(host)
         if scroll:
             area = QScrollArea()
             area.setWidgetResizable(True)
             area.setWidget(host)
-            self.tabs.addTab(area, title)
+            page = area
         else:
-            self.tabs.addTab(host, title)
+            page = host
+        self.pages[title] = page
+        (self.settings_tabs if settings else self.resources_tabs).addTab(page, title)
         return layout
+
+    def open_settings(self, page):
+        self.tabs.setCurrentWidget(self.settings_tabs)
+        self.settings_tabs.setCurrentWidget(self.roster_panel if page == 'roster' else
+            self.pages['共享与接收设置' if page == 'share' else '员工连接'])
+
+    def open_resource(self, title):
+        self.tabs.setCurrentWidget(self.resources_tabs)
+        self.resources_tabs.setCurrentWidget(self.pages[title])
+
+    def select_ledger_issue(self, identity):
+        for row in range(self.issues.rowCount()):
+            if self.issues.item(row, 0).data(Qt.UserRole) == identity:
+                self.issues.selectRow(row)
+                return
+
+    def open_issue_logs(self, identity):
+        # Show all authorized contributors to this issue. A prior person's or
+        # date filter must not silently hide the evidence for this selection.
+        self.employee.setCurrentIndex(self.employee.findData(''))
+        self.issue.setCurrentIndex(self.issue.findData(identity))
+        self.start.clear()
+        self.end.clear()
+        self.question.setPlainText('请列出该 issue 的最新进展、阻塞和下一步，并标注日志依据。')
+        self.open_resource('日志查询')
+        self.ask(False)
+
+    def open_progress_question(self, person_id='', issue_id=''):
+        if self.question_window is None:
+            from evaluation_question_ui import ProgressQuestionDialog
+            self.question_window = ProgressQuestionDialog(self)
+        self.question_window.open_scope(person_id, issue_id)
 
     def perform(self, callback):
         try:
@@ -236,20 +279,36 @@ class EvaluationDialog(QDialog):
             return None
 
     def build_share(self):
-        layout = self.page('我的共享', True)
+        layout = self.page('共享与接收设置', True, settings=True)
         form = QFormLayout()
         self.name, self.department = QLineEdit(), QLineEdit()
         self.sharing = QCheckBox('启用组织共享（仅下方勾选的工作 issue）')
-        self.evaluator = QCheckBox('启用评估端（接收员工授权后同步）')
+        self.evaluator = QCheckBox('接收员工共享资料（取得授权后自动同步）')
         self.root = QLineEdit()
         root_row = QHBoxLayout()
         root_row.addWidget(self.root)
         root_row.addWidget(action('选择目录', self.pick_root))
         form.addRow('姓名／员工标识', self.name)
         form.addRow('部门', self.department)
+        form.addRow(self.evaluator)
+        layout.addLayout(form)
+        row = QHBoxLayout()
+        row.addWidget(action('保存接收设置', self.save))
+        row.addWidget(action('下一步：连接员工', lambda: self.open_settings('peers')))
+        row.addStretch()
+        layout.addLayout(row)
+        layout.addWidget(note('保存后，在“员工连接”导入员工发来的授权；再到“员工名册”对应人员。'))
+        self.own_sharing = QWidget()
+        toggle = action('高级：共享我自己的工作', lambda: self.own_sharing.setVisible(not self.own_sharing.isVisible()))
+        layout.addWidget(toggle)
+        layout.addWidget(self.own_sharing)
+        layout.addStretch()
+        self.own_sharing.hide()
+        layout = QVBoxLayout(self.own_sharing)
+        layout.setContentsMargins(0, 0, 0, 0)
+        form = QFormLayout()
         form.addRow('汇报资料根目录', root_row)
         form.addRow(self.sharing)
-        form.addRow(self.evaluator)
         layout.addLayout(form)
         self.shared_tasks = QListWidget()
         self.shared_tasks.setMinimumHeight(120)
@@ -322,7 +381,7 @@ class EvaluationDialog(QDialog):
             self.perform(lambda: self.client.revoke(identifier))
 
     def build_peers(self):
-        layout = self.page('员工与同步')
+        layout = self.page('员工连接', settings=True)
         layout.addWidget(note('自动发现只提供地址和指纹。必须先取得员工单独授权，才能读取日志。员工离线时可查最后成功副本，已撤回范围在下次成功同步后隐藏。'))
         self.discovered = table(['姓名', '局域网地址', 'TLS 指纹'])
         self.discovered.setMaximumHeight(180)
@@ -379,7 +438,13 @@ class EvaluationDialog(QDialog):
             self.perform(lambda: self.client.remove_peer(employee))
 
     def build_query(self):
-        layout = self.page('日志问答')
+        layout = self.page('日志查询')
+        launcher = QHBoxLayout()
+        launcher.addWidget(action('打开进度提问窗口', lambda: self.open_progress_question(
+            person_id=(self.employee.currentData() or '')[7:] if (self.employee.currentData() or '').startswith('person:') else '',
+            issue_id=self.issue.currentData() or '')))
+        launcher.addStretch()
+        layout.addLayout(launcher)
         row = QHBoxLayout()
         self.employee, self.issue = QComboBox(), QComboBox()
         self.employee.setMinimumContentsLength(8)
@@ -443,7 +508,7 @@ class EvaluationDialog(QDialog):
         return text
 
     def build_ledger(self):
-        layout = self.page('进度台账')
+        layout = self.page('进度明细')
         layout.addWidget(note('按已核对的子 Issue 清单及 Linear 完成状态加权，日志补充进展与阻碍。状态来自同步快照；缺少子项资料时显示待估。本系统不做验收或评分。'))
         self.issues = table(['Issue', '工作内容', '日志贡献者', 'Linear 状态', '开发进度', '资料覆盖', '最早依据日志', 'Linear 负责人'])
         self.issues.itemSelectionChanged.connect(self.show_items)
@@ -544,6 +609,9 @@ class EvaluationDialog(QDialog):
         self.snapshot_data = snapshot
         self.complete_report_panel.refresh(snapshot)
         self.roster_panel.refresh(snapshot)
+        self.overview_panel.refresh(snapshot)
+        if self.question_window is not None:
+            self.question_window.refresh(snapshot)
         config = snapshot['config']
         if not self.initialized:
             self.name.setText(config['name'])
@@ -630,6 +698,8 @@ class EvaluationDialog(QDialog):
 
     def hideEvent(self, event):
         self.timer.stop()
+        if self.question_window is not None:
+            self.question_window.close()
         # Online attachments are never retained by a closed viewer.
         self.report_text.clear()
         self.cached.pop('report_text', None)

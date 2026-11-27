@@ -4,7 +4,7 @@
 
 支持 Linux x86_64、Windows 10/11 x64，可调整窗口与字体。
 
-此为 `evaluator` 开发分支：增加员工名册、设备与 Linear 对应、日志共享、离线副本及进度台账。[使用手册](docs/EVALUATOR_GUIDE.md)。
+此为 `evaluator` 开发分支：面向管理者默认展示团队工作概览，按开发人员查看 issue 进展、阻塞和下一步；支持日志共享、离线资料、员工名册及进度明细。[使用手册](docs/EVALUATOR_GUIDE.md)。
 
 ## 启动
 

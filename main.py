@@ -295,7 +295,7 @@ class Momo(QMainWindow):
         if self.runtime.profile.work:
             menu.addAction("需要我处理",self.open_attention)
             menu.addAction("日报与同步",self.open_daily)
-            menu.addAction("日志评估",self.open_evaluation)
+            menu.addAction("团队进度",self.open_evaluation)
         menu.addAction('应用更新',self.open_updates)
         menu.addSeparator()
         menu.addAction("停止执行并退出",self.exit_application)
@@ -330,7 +330,7 @@ class Momo(QMainWindow):
             self.weeklog_button=button('总结周报','nav',callback=lambda:self.open_worklog('week'))
             self.weeklog_button.setToolTip('统计本周一 00:00 至当前；仅本地保存')
             col.addWidget(self.weeklog_button)
-            col.addWidget(button('日志评估','nav',callback=self.open_evaluation))
+            col.addWidget(button('团队进度','nav',callback=self.open_evaluation))
         col.addStretch()
         quiet=QFrame(); quiet.setObjectName("quiet"); quiet.setMinimumHeight(54); q=box(quiet,margins=(13,12,13,12),spacing=8)
         self.sidebar_done=label("","muted",True); q.addWidget(self.sidebar_done)

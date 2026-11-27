@@ -13,6 +13,7 @@ from evaluation.insights import ProgressStore, retrieve, render_local_answer
 from evaluation.ledger import IssueLedger
 from evaluation.roster import RosterStore
 from evaluation.people import project_roster, attribute_result, source_key, matching_records
+from evaluation.overview import build_overview
 from evaluation.protocol import PROTOCOL
 from evaluation.report_archive import ReportArchive, CollectedReports
 from services.base import MomoService, ok, require
@@ -133,13 +134,15 @@ class EvaluationService(MomoService):
         ledger['updates'] = self._allowed_updates(ledger['updates'], records)
         discovered = self.discovery.snapshot() if self.discovery else []
         progress = self.progress_store.snapshot(records)
+        owners = self.roster_store.record_owners(records)
         roster = project_roster(self.roster_store.snapshot(), records,
-            self.roster_store.record_owners(records), self.state['peers'], employees,
+            owners, self.state['peers'], employees,
             discovered, progress, ledger['updates'])
+        overview = build_overview(progress, roster, ledger['updates'], records, owners)
         grants = self.server.grants() if self.server else []
         return ok({'config': state, 'notice': self.notice, 'endpoint': self.endpoint,
                    'grants': grants, 'discovered': discovered,
-                   'employees': employees, 'progress': progress, 'roster': roster,
+                   'employees': employees, 'progress': progress, 'roster': roster, 'overview': overview,
                    'record_count': len(records), 'syncing': self.syncing, 'query': self.query, 'reports': self.report_result,
                    'report_tasks': list(report_tasks.values()), 'issue_sources': issue_sources,
                    'ledger': ledger, 'complete_reports': self.visible_complete_reports(),

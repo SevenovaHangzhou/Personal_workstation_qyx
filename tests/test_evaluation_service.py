@@ -163,6 +163,8 @@ class EvaluationServiceTests(unittest.TestCase):
         self.assertIn('[S1]', query['answer'])
         self.assertIn(row['digest'], query['answer'])
         self.assertNotIn(outsider['employee_id'], json.dumps(query))
+        self.assertEqual([issue['id'] for issue in snapshot['overview']['issues']], [row['issue_id']])
+        self.assertNotIn(outsider['id'], json.dumps(snapshot['overview']))
         self.assertIsNone(snapshot['progress']['issues'][0]['percent'])
         self.assertEqual(self.runtime.tasks.tasks, before)
 
@@ -350,6 +352,9 @@ class EvaluationServiceTests(unittest.TestCase):
         self.assertEqual(self.client.snapshot()['record_count'], 1)
         self.assertEqual(self.client.snapshot()['ledger']['updates'], [])
         self.assertEqual(self.client.issue_history(old['issue_id']), [])
+        overview = self.client.snapshot()['overview']
+        self.assertNotIn(saved['summary'], json.dumps(overview, ensure_ascii=False))
+        self.assertIn(replacement['summary'], overview['issues'][0]['summary'])
         self.assertEqual(self.service.ledger.history(old['issue_id']), [saved])
         self.service.replicas.sync(self.employee, [], [], '测试员工', '电气')
         with self.assertRaisesRegex(ValueError, '共享范围'):
