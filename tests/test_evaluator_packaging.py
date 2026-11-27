@@ -46,6 +46,17 @@ class EvaluatorPackagingTests(unittest.TestCase):
                               capture_output=True,text=True,timeout=20,check=True)
         self.assertIn('EVALUATOR '+APP_VERSION,result.stdout)
 
+    def test_offline_selftest_opens_manager_overview_and_question_window(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            env=dict(os.environ, QT_QPA_PLATFORM='offscreen', ORBIT_SKIP_OTA='1')
+            result=subprocess.run([__import__('sys').executable,str(ROOT/'evaluator.py'),'--self-test'],
+                cwd=temporary, env=env, capture_output=True, text=True, encoding='utf-8', timeout=30)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('manager-overview',result.stdout)
+            self.assertIn('manager-progress-questions',result.stdout)
+            self.assertIn('"model_called": false',result.stdout)
+            self.assertFalse(list(Path(temporary).rglob('tasks.json')))
+
     def test_evaluator_zip_has_explicit_identity_and_preserves_path_guards(self):
         from ota_core import extract_windows_package
         with tempfile.TemporaryDirectory() as temporary:

@@ -37,6 +37,7 @@ def run_checks(app,window_factory,graph_port=None):
         check_persisted_text(Path(directory)/'persisted-state/tasks.json')
         runtime=MomoRuntime(Path(directory)/'tasks.json',auto_tick=False,profile=PROFILE,graph_port=graph_port).start()
         window=reader=evaluation_panel=None
+        manager_checks=[]
         try:
             runtime.tasks.clear_samples()
             task=make_task('隔离离线检查',PROFILE.categories[0]); runtime.tasks.add(task)
@@ -54,12 +55,17 @@ def run_checks(app,window_factory,graph_port=None):
                 if os.environ.get('ORBIT_EVALUATOR_BUILD')=='1':
                     from evaluation_ui import EvaluationDialog
                     evaluation_panel=EvaluationDialog(window)
-                    assert evaluation_panel.tabs.count()==7
+                    assert [evaluation_panel.tabs.tabText(i) for i in range(evaluation_panel.tabs.count())]==['工作概览','日志与资料','人员与连接']
+                    assert evaluation_panel.tabs.currentWidget() is evaluation_panel.overview_panel
+                    evaluation_panel.open_progress_question()
+                    assert evaluation_panel.question_window.scope()==('', '')
+                    assert not evaluation_panel.question_window.ask_button.isEnabled()
                     from evaluation.mesh import ShareServer
                     import uuid
                     wire=ShareServer(Path(directory)/'wire-probe',str(uuid.uuid4()),'隔离自检',lambda:[])
                     wire._certificate()
                     assert not runtime.update_service.auto_tick
+                    manager_checks=['manager-overview','manager-progress-questions']
             else:
                 assert runtime.daily is None and runtime.station is None and runtime.codex is None
                 assert not names.intersection({'/LinearService','/CodexService','/DailyService','/GitService','/EvaluationService'})
@@ -95,7 +101,7 @@ def run_checks(app,window_factory,graph_port=None):
                         assert registered==names
                         assert observed['edges']==before['edges']
                 graph_checks=['graph-product-inventory','graph-http-assets','graph-query-does-not-pollute']
-            print(json.dumps({'product' :PROFILE.key,'app_id':PROFILE.app_id,'checks':['product-services','task-DAG','native-window','daily-mcp-config-override','utf8-state-reopen']+(['course-14-chapters'] if runtime.learning else [])+graph_checks,'network':False,'model_called':False}))
+            print(json.dumps({'product' :PROFILE.key,'app_id':PROFILE.app_id,'checks':['product-services','task-DAG','native-window','daily-mcp-config-override','utf8-state-reopen']+(['course-14-chapters'] if runtime.learning else [])+graph_checks+manager_checks,'network':False,'model_called':False}))
             return 0
         finally:
             if evaluation_panel:evaluation_panel.close();evaluation_panel.deleteLater()
