@@ -2,8 +2,9 @@
 from dataclasses import dataclass
 import os
 import re
+from pathlib import Path
 from PyQt5.QtCore import QObject, QSettings, QByteArray, Qt, pyqtSignal
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QFontDatabase
 from theme import scaled_style
 
 WINDOWS = [('auto', '适配屏幕 · 记住手动调整'), ('compact', '紧凑窗口 · 1024 × 720'),
@@ -35,16 +36,34 @@ class DisplayController(QObject):
         self.evaluator = os.environ.get('ORBIT_EVALUATOR_BUILD') == '1' if evaluator is None else evaluator
         self.default_size = 14 if self.evaluator else 13
         self.maximum_size = 24 if self.evaluator else 18
+        self.font_family = self.song_family() if self.evaluator else ''
         self.saved = DisplayPreferences.read(store, self.default_size, self.maximum_size); self.current = self.saved
         self.previewing = False
+
+    @staticmethod
+    def song_family():
+        fonts = QFontDatabase()
+        available = {name.casefold(): name for name in fonts.families()}
+        for name in ('SimSun', '宋体'):
+            if name.casefold() in available:
+                return available[name.casefold()]
+        fallback = Path(__file__).parent/'assets/fonts/NotoSerifCJKsc-Regular.otf'
+        if fallback.is_file() and 'noto serif cjk sc' not in available:
+            identity = fonts.addApplicationFont(str(fallback))
+            if identity >= 0:
+                return fonts.applicationFontFamilies(identity)[0]
+        for name in ('Noto Serif CJK SC', 'Songti SC'):
+            if name.casefold() in available:
+                return available[name.casefold()]
+        return 'SimSun'
 
     def apply(self, preferences):
         self.current = preferences
         font = QFont(self.app.font()); font.setPixelSize(preferences.font_size)
         style = scaled_style(preferences.font_size)
         if self.evaluator:
-            font.setFamily('SimSun'); font.setWeight(QFont.Normal)
-            style = re.sub(r'font-family:[^;]+;', "font-family: 'SimSun', '宋体', 'Songti SC', 'Noto Serif CJK SC', serif;", style)
+            font.setFamily(self.font_family); font.setWeight(QFont.Normal)
+            style = re.sub(r'font-family:[^;]+;', "font-family: '"+self.font_family+"';", style)
             style = re.sub(r'font-weight:\s*\d+', 'font-weight: normal', style)
         self.app.setFont(font); self.app.setStyleSheet(style)
         self.changed.emit()

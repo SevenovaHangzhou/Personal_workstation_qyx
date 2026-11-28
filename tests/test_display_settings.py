@@ -21,7 +21,7 @@ class DisplayTests(unittest.TestCase):
         display = DisplayController(APP, self.store, evaluator=True)
         self.assertEqual(display.saved.font_size, 14)
         display.apply(display.saved)
-        self.assertIn("'SimSun'", APP.styleSheet())
+        self.assertIn("'"+display.font_family+"'", APP.styleSheet())
         self.assertIn('font-weight: normal', APP.styleSheet())
         self.assertNotIn('font-weight: 600', APP.styleSheet())
         display.save(DisplayPreferences(22))
@@ -30,8 +30,9 @@ class DisplayTests(unittest.TestCase):
         self.store.setValue('display/font_size', 999)
         self.assertEqual(DisplayController(APP, self.store, evaluator=True).saved.font_size, 14)
         if __import__('os').name == 'nt':
-            from PyQt5.QtGui import QFontInfo
-            self.assertIn(QFontInfo(APP.font()).family().lower(), ('simsun', '宋体'))
+            from PyQt5.QtGui import QFontInfo, QFontMetrics
+            self.assertIn(QFontInfo(APP.font()).family().lower(), ('simsun', '宋体', 'noto serif cjk sc'))
+            self.assertTrue(all(QFontMetrics(APP.font()).inFont(char) for char in '人员任务进度'))
 
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(); self.root=Path(self.temp.name)

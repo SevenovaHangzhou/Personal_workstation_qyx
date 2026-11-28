@@ -35,6 +35,9 @@ def main():
     work=args.work_dir.resolve();output=args.output.resolve();work.mkdir(parents=True,exist_ok=True);output.mkdir(parents=True,exist_ok=True)
     archive=output/f'{SLUG}-{APP_VERSION}-windows-x86_64.zip';installer=output/f'{SLUG}-{APP_VERSION}-windows-x86_64-setup.exe'
     if any(p.exists() for p in (archive,installer,output/MANIFEST)):parser.error('Existing release files will not be replaced.')
+    if SLUG == 'orbit-evaluator':
+        from fetch_evaluator_font import main as fetch_font
+        fetch_font()
     for spec in ('orbit.spec','windows-launcher.spec'):
         command([sys.executable,'-m','PyInstaller','--noconfirm','--clean','--distpath',str(work/'dist'),
                  '--workpath',str(work/'pyinstaller'/spec),str(ROOT/'packaging'/spec)],cwd=ROOT)
