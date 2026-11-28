@@ -96,11 +96,15 @@ def main():
         target=Path(temporary)/'中文安装目录-星序 🌀'
         command([str(installer),'/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOICONS','/DIR='+str(target)],timeout=90)
         probe(target,'installer')
+        # Verify repeat installation over an existing installation as well.
+        command([str(installer),'/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOICONS','/DIR='+str(target)],timeout=90)
+        probe(target,'reinstalled')
         command([str(target/'unins000.exe'),'/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART'],timeout=90)
+        assert not (target/(SLUG+'.exe')).exists()
     artifacts=[dict(file=p.name,bytes=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest()) for p in (archive,installer)]
     revision=command(['git','rev-parse','HEAD'],cwd=ROOT,capture_output=True,text=True).stdout.strip()
     manifest=dict(app_id=PROFILE.app_id,product=PROFILE.product,version=APP_VERSION,platform='windows-x86_64',minimum_windows='10',source_commit=revision,built_at=datetime.now(timezone.utc).isoformat(),
-        python=platform.python_version(),runtime_packages={name:metadata.version(name) for name in ('PyQt5','PyQt5-Qt5','PyQt5-sip','readerwriterlock','starlette','tzdata','Send2Trash','pyinstaller')},artifacts=artifacts,verification=['Windows native tests','frozen self-test + graph','portable self-test + graph','installer install/uninstall + self-test + graph','frozen UTF-8 mode independent of PYTHONUTF8','Chinese install/data paths + launcher reopen screenshots'],user_data_included=False,codex_credentials_included=False)
+        python=platform.python_version(),runtime_packages={name:metadata.version(name) for name in ('PyQt5','PyQt5-Qt5','PyQt5-sip','readerwriterlock','starlette','tzdata','Send2Trash','pyinstaller')},artifacts=artifacts,verification=['Windows native tests','frozen self-test + graph','portable self-test + graph','installer install/reinstall/uninstall + self-test + graph','frozen UTF-8 mode independent of PYTHONUTF8','Chinese install/data paths + launcher reopen screenshots'],user_data_included=False,codex_credentials_included=False)
     (output/MANIFEST).write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     (output/SUMS).write_text(''.join(f'{row["sha256"]}  {row["file"]}\n' for row in artifacts),encoding='utf-8')
     print(json.dumps(manifest,ensure_ascii=False,indent=2))

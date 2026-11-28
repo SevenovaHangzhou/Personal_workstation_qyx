@@ -6,7 +6,7 @@ from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea,
-    QTabWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
+    QSpinBox, QTabWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 
 def action(text, callback, parent=None):
@@ -216,12 +216,40 @@ class EvaluationDialog(QDialog):
         self.status = note('')
         row = QHBoxLayout()
         row.addWidget(self.status, 1)
+        self.display = getattr(owner, 'display', None)
+        self.font_size = QSpinBox()
+        self.font_size.setAccessibleName('管理员字号')
+        self.font_size.setToolTip('即时调整文字大小，并记住下次启动时的设置')
+        if self.display:
+            row.addWidget(note('宋体 · 字号' if self.display.evaluator else '字号'))
+            self.font_size.setRange(12, self.display.maximum_size)
+            self.sync_font_size()
+            row.addWidget(self.font_size)
+            self.font_size.valueChanged.connect(self.change_font_size)
+            self.display.changed.connect(self.sync_font_size)
+        else:
+            self.font_size.hide()
         row.addWidget(action('关闭', self.close))
         layout.addLayout(row)
         self.timer = QTimer(self)
         self.timer.setInterval(1500)
         self.timer.timeout.connect(self.refresh)
         self.refresh()
+
+    def sync_font_size(self):
+        self.font_size.blockSignals(True)
+        self.font_size.setValue(self.display.current.font_size)
+        self.font_size.blockSignals(False)
+        self.overview_panel.update_density()
+
+    def change_font_size(self, size):
+        from dataclasses import replace
+        previous = self.display.current
+        try:
+            self.display.save(replace(previous, font_size=size))
+        except OSError as exc:
+            self.display.apply(previous)
+            QMessageBox.warning(self, '字号未保存', str(exc))
 
     def page(self, title, scroll=False, settings=False):
         host = QWidget()

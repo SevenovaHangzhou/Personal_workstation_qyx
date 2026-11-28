@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QHeaderView, QLineE
     QListWidget, QListWidgetItem, QPlainTextEdit, QSplitter, QVBoxLayout, QWidget)
 
 from evaluation.overview import filter_issues
+from evaluation_progress_ui import IssueProgress
 from evaluation_ui import action, fill, note, selection, table
 
 
@@ -103,7 +104,7 @@ class OverviewPanel(QWidget):
         box.addWidget(self.person_note)
         self.content = QSplitter(Qt.Vertical)
         self.content.setChildrenCollapsible(False)
-        self.issues = table(['Issue / 工作内容', '负责人', '当前状态', '最新进展'])
+        self.issues = table(['Issue / 工作内容', '负责人', '当前状态', '完成进度', '最新进展'])
         self.issues.setShowGrid(False)
         self.issues.setAlternatingRowColors(True)
         self.issues.setStyleSheet('QTableWidget { background: white; alternate-background-color: #f5f7fa; '
@@ -115,13 +116,20 @@ class OverviewPanel(QWidget):
         self.issues.setColumnWidth(0, 240)
         self.issues.setColumnWidth(1, 100)
         self.issues.setColumnWidth(2, 130)
+        self.issues.setColumnWidth(3, 110)
         self.issues.setMinimumHeight(100)
         self.issues.itemSelectionChanged.connect(self.show_issue)
         self.content.addWidget(self.issues)
         self.detail = QPlainTextEdit()
         self.detail.setReadOnly(True)
         self.detail.setMinimumHeight(85)
-        self.content.addWidget(self.detail)
+        detail_area = QWidget()
+        detail_layout = QVBoxLayout(detail_area)
+        detail_layout.setContentsMargins(0, 0, 0, 0)
+        self.progress = IssueProgress()
+        detail_layout.addWidget(self.progress)
+        detail_layout.addWidget(self.detail, 1)
+        self.content.addWidget(detail_area)
         self.content.setSizes([200, 220])
         box.addWidget(self.content, 1)
         self.result_note = note('')
@@ -236,12 +244,12 @@ class OverviewPanel(QWidget):
         rows = []
         for issue in visible:
             state = issue['state_label']
-            if issue['percent'] is not None:
-                state += f" · {issue['percent']:g}%"
             if issue['attention']:
                 state += '\n'+issue['attention'][0]
             rows.append((issue['id'], [issue['identifier']+'  '+issue['title'],
-                issue['owner_name'] or '待确认', state, brief(issue['summary']) or '待补充进展']))
+                issue['owner_name'] or '待确认', state,
+                f"{issue['percent']:g}%" if issue['percent'] is not None else '已取消' if issue['state'] == 'canceled' else '待估',
+                brief(issue['summary']) or '待补充进展']))
         if rows != self.rows_key:
             old = selection(self.issues)
             self.issues.blockSignals(True)
@@ -255,7 +263,11 @@ class OverviewPanel(QWidget):
                 if issue['attention']:
                     self.issues.item(index, 2).setForeground(QColor('#99642b'))
                 self.issues.setRowHeight(index, max(52, self.issues.fontMetrics().height()*2+12))
-                self.issues.item(index, 3).setToolTip(issue['summary'] or '待补充进展')
+                self.issues.item(index, 3).setText('')
+                progress = IssueProgress(self.issues)
+                self.issues.setCellWidget(index, 3, progress)
+                progress.refresh(issue)
+                self.issues.item(index, 4).setToolTip(issue['summary'] or '待补充进展')
             self.issues.blockSignals(False)
             self.rows_key = rows
         self.result_note.setText(f'当前显示 {len(visible)} 项 · 仅含已共享资料')
@@ -268,6 +280,9 @@ class OverviewPanel(QWidget):
 
     def show_issue(self):
         issue = self.current_issue()
+        self.progress.setVisible(bool(issue))
+        if issue:
+            self.progress.refresh(issue)
         self.logs.setEnabled(bool(issue and self.snapshot.get('issue_sources', {}).get(issue['id'])))
         self.edit.setEnabled(self.logs.isEnabled())
         self.ledger.setEnabled(bool(issue))

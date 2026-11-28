@@ -32,11 +32,25 @@ SetupIconFile=..\assets\{#AppIcon}.ico
 UninstallDisplayIcon={app}\{#AppSlug}.exe
 Compression=lzma2
 SolidCompression=yes
+#if AppSlug == "orbit-evaluator"
+CloseApplications=yes
+RestartApplications=no
+SetupLogging=yes
+#else
 CloseApplications=no
+#endif
 [Files]
 Source: "{#BundleDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Tasks]
+#if AppSlug == "orbit-evaluator"
+Name: "desktopicon"; Description: "Create a desktop shortcut"
+#else
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
+#endif
 [Icons]
 Name: "{userprograms}\{#AppName}"; Filename: "{app}\{#AppSlug}.exe"; IconFilename: "{app}\{#AppSlug}.ico"
 Name: "{userdesktop}\{#AppName}"; Filename: "{app}\{#AppSlug}.exe"; IconFilename: "{app}\{#AppSlug}.ico"; Tasks: desktopicon
+#if AppSlug == "orbit-evaluator"
+[Run]
+Filename: "{app}\{#AppSlug}.exe"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent
+#endif

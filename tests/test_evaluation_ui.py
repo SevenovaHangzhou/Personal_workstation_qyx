@@ -243,6 +243,15 @@ class EvaluationUiTests(unittest.TestCase):
                         if self.dialog.issues.item(index, 0).data(Qt.UserRole) == parent['issue_id'])
         self.assertEqual(self.dialog.issues.item(parent_row(), 3).text(), '已完成')
         self.assertEqual(self.dialog.issues.item(parent_row(), 4).text(), '60.0%')
+        panel = self.dialog.overview_panel
+        panel.state.setCurrentIndex(panel.state.findData('all'))
+        def overview_row():
+            return next(index for index in range(panel.issues.rowCount())
+                        if panel.issues.item(index, 0).data(Qt.UserRole) == parent['issue_id'])
+        panel.issues.selectRow(overview_row())
+        self.assertEqual(panel.issues.cellWidget(overview_row(), 3).bar.value(), 6000)
+        self.assertEqual(panel.progress.label.text(), '60%')
+        self.assertFalse(panel.progress.bar.isHidden())
         snapshot = self.runtime.evaluation.snapshot()['progress']
         estimated = next(issue for issue in snapshot['issues'] if issue['id'] == parent['issue_id'])
         self.assertEqual(estimated['basis'], 'linear_subissues_weighted')
@@ -256,6 +265,10 @@ class EvaluationUiTests(unittest.TestCase):
                                                    confirmed=True, expected_revision=snapshot['revision'])
         self.dialog.refresh()
         self.assertEqual(self.dialog.issues.item(parent_row(), 4).text(), '待估')
+        self.assertEqual(panel.issues.cellWidget(overview_row(), 3).label.text(), '待估')
+        self.assertTrue(panel.issues.cellWidget(overview_row(), 3).bar.isHidden())
+        self.assertEqual(panel.progress.label.text(), '待估')
+        self.assertTrue(panel.progress.bar.isHidden())
         unknown = next(issue for issue in self.runtime.evaluation.snapshot()['progress']['issues']
                        if issue['id'] == parent['issue_id'])
         self.assertIsNone(unknown['percent'])
@@ -440,6 +453,31 @@ class EvaluationUiTests(unittest.TestCase):
         self.assertEqual(self.dialog.report_text.toPlainText(), '')
         self.assertNotIn('report_text', self.dialog.cached)
         self.assertEqual(list((self.root/'evaluation').rglob('*.md')), [])
+
+    def test_administrator_font_control_updates_open_question_and_remembers_size(self):
+        from PyQt5.QtCore import QSettings
+        font, style = QFont(APP.font()), APP.styleSheet()
+        try:
+            self.dialog.close(); self.dialog.deleteLater(); APP.processEvents()
+            store = QSettings(str(self.root/'display.ini'), QSettings.IniFormat)
+            self.owner.display = DisplayController(APP, store, evaluator=True)
+            self.owner.display.apply(self.owner.display.saved)
+            self.dialog = EvaluationDialog(self.owner)
+            self.dialog.show(); self.dialog.timer.stop()
+            self.dialog.open_progress_question()
+            window = self.dialog.question_window
+            window.question.setPlainText('保留尚未发送的问题')
+            self.dialog.font_size.setValue(24)
+            APP.processEvents()
+            self.assertEqual(window.question.font().pixelSize(), 24)
+            self.assertEqual(window.question.toPlainText(), '保留尚未发送的问题')
+            self.assertEqual(DisplayController(APP, store, evaluator=True).saved.font_size, 24)
+            self.dialog.font_size.setValue(18)
+            self.dialog.resize(850, 580); APP.processEvents()
+            self.assertTrue(self.dialog.rect().contains(self.dialog.font_size.mapTo(self.dialog,
+                self.dialog.font_size.rect().bottomRight())))
+        finally:
+            APP.setFont(font); APP.setStyleSheet(style); APP.processEvents()
 
     def seed_person_for_questions(self):
         row = self.seed()

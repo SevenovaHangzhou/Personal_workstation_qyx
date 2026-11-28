@@ -17,7 +17,7 @@ def version(value):
     if not VERSION_RE.fullmatch(value):raise ValueError('invalid version')
     return tuple(map(int,value.split('.')))
 
-def main():
+def _launch():
     base=Path(sys.executable).resolve().parent
     current=(base/'VERSION').read_text(encoding='utf-8').strip()
     home=Path(os.environ.get('LOCALAPPDATA',str(Path.home()/'AppData/Local')))
@@ -56,5 +56,25 @@ def main():
             return result.returncode
     finally:
         if marker:marker.unlink(missing_ok=True)
+
+def show_startup_error():
+    import ctypes
+    logs = Path(os.environ.get('LOCALAPPDATA', str(Path.home()/'AppData/Local')))/'Sevenova'/DATA_NAME/'logs/startup.log'
+    title = '星序评估启动失败' if EVALUATOR else PROFILE.name+'启动失败'
+    message = ('应用未能正常启动。请完整解压便携包，或关闭旧版后重新运行安装程序。\n'
+               '问题仍存在时，请将报错情况和下方日志交给支持人员。日志可能包含工作信息，请勿公开上传。\n\n'
+               '启动日志（如已生成）：\n'+str(logs))
+    ctypes.windll.user32.MessageBoxW(None, message, title, 0x10)
+
+
+def main():
+    try:
+        result = _launch()
+    except (OSError, ValueError):
+        result = 1
+    if EVALUATOR and result not in (0, 75) and not any(arg in ('--self-test', '--version', '--screenshot') for arg in sys.argv[1:]):
+        show_startup_error()
+    return result
+
 
 if __name__=='__main__':raise SystemExit(main())

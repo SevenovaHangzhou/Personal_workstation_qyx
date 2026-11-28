@@ -17,6 +17,23 @@ from ota_core import extract_windows_package,package_names
 ROOT=Path(__file__).resolve().parents[1]
 
 class PortablePlatformTests(unittest.TestCase):
+    @patch('windows_launcher.EVALUATOR', True)
+    def test_launcher_reports_failure_but_not_normal_or_secondary_instance_exit(self):
+        import windows_launcher
+        for code in (0, 75, 1):
+            with self.subTest(code=code), patch('windows_launcher._launch', return_value=code), \
+                 patch('windows_launcher.show_startup_error') as show, patch.object(sys, 'argv', ['app.exe']):
+                self.assertEqual(windows_launcher.main(), code)
+                self.assertEqual(show.call_count, int(code == 1))
+        with patch('windows_launcher._launch', side_effect=FileNotFoundError('VERSION')), \
+             patch('windows_launcher.show_startup_error') as show, patch.object(sys, 'argv', ['app.exe']):
+            self.assertEqual(windows_launcher.main(), 1)
+            show.assert_called_once()
+        with patch('windows_launcher._launch', return_value=1), \
+             patch('windows_launcher.show_startup_error') as show, patch.object(sys, 'argv', ['app.exe', '--self-test']):
+            self.assertEqual(windows_launcher.main(), 1)
+            show.assert_not_called()
+
     def test_native_lock_excludes_another_process_and_releases_on_close(self):
         with tempfile.TemporaryDirectory() as temp:
             path=Path(temp)/'space.lock'

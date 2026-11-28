@@ -26,7 +26,7 @@ class PreferencesDialog(QDialog):
         self.window_mode.setCurrentIndex(self.window_mode.findData(self.original.window_mode)); body.addWidget(self.window_mode)
         heading = box(horizontal=True); heading.addWidget(label('字体大小','section')); heading.addStretch()
         self.size_label = label(''); heading.addWidget(self.size_label); body.addLayout(heading)
-        self.font_size = QSlider(Qt.Horizontal); self.font_size.setRange(12,18); self.font_size.setValue(self.original.font_size)
+        self.font_size = QSlider(Qt.Horizontal); self.font_size.setRange(12,self.display.maximum_size); self.font_size.setValue(self.original.font_size)
         self.font_size.setAccessibleName('字体大小'); self.font_size.setTickPosition(QSlider.TicksBelow); self.font_size.setTickInterval(1)
         body.addWidget(self.font_size)
         self.preview = label(APP_NAME+'，'+TAGLINE+'\n任务与输入文字一起调整。','h2',True); body.addWidget(self.preview)
@@ -73,7 +73,7 @@ class PreferencesDialog(QDialog):
         self.display.fit_window(self.owner,self.window_mode.currentData())
 
     def reset_display(self):
-        self.font_size.setValue(13); self.window_mode.setCurrentIndex(0)
+        self.font_size.setValue(self.display.default_size); self.window_mode.setCurrentIndex(0)
         self.preview_window()
 
     def accept(self):

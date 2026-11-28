@@ -17,6 +17,22 @@ from model import make_task
 
 
 class DisplayTests(unittest.TestCase):
+    def test_evaluator_defaults_normal_song_font_and_persists_larger_size(self):
+        display = DisplayController(APP, self.store, evaluator=True)
+        self.assertEqual(display.saved.font_size, 14)
+        display.apply(display.saved)
+        self.assertIn("'SimSun'", APP.styleSheet())
+        self.assertIn('font-weight: normal', APP.styleSheet())
+        self.assertNotIn('font-weight: 600', APP.styleSheet())
+        display.save(DisplayPreferences(22))
+        loaded = DisplayController(APP, self.store, evaluator=True)
+        self.assertEqual(loaded.saved.font_size, 22)
+        self.store.setValue('display/font_size', 999)
+        self.assertEqual(DisplayController(APP, self.store, evaluator=True).saved.font_size, 14)
+        if __import__('os').name == 'nt':
+            from PyQt5.QtGui import QFontInfo
+            self.assertIn(QFontInfo(APP.font()).family().lower(), ('simsun', '宋体'))
+
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(); self.root=Path(self.temp.name)
         self.store=QSettings(str(self.root/'display.ini'),QSettings.IniFormat)

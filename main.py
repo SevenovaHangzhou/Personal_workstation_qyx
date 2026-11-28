@@ -1300,6 +1300,11 @@ def main():
             def capture():
                 args.screenshot.parent.mkdir(parents=True,exist_ok=True)
                 target=window.mini if args.screenshot_view=="mini" else window.station_dialog if args.screenshot_view in ("attention","station") else window
+                if evaluator_build and args.screenshot_view == 'today':
+                    target = window.evaluation_dialog
+                    if target is None or not target.isVisible():
+                        app.exit(1)
+                        return
                 app.exit(0 if target.grab().save(str(args.screenshot)) else 1)
             QTimer.singleShot(450,capture)
         return app.exec_()
